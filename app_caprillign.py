@@ -4,12 +4,6 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="HACCP Caprilli", page_icon="🍦")
-
-st.title("Controllo Temperature HACCP 🍦")
-st.caption("Caprilli Gelateria Naturale")
-
 # --- CONEXIÓN CON GOOGLE SHEETS ---
 def obtener_hoja():
     scopes = [
@@ -18,7 +12,12 @@ def obtener_hoja():
     ]
     
     if "gcp_service_account" in st.secrets:
+        # Convertimos st.secrets a un diccionario modificable
         creds_dict = dict(st.secrets["gcp_service_account"])
+        # Corregimos el formato de los saltos de línea en la clave privada
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     else:
         creds = Credentials.from_service_account_file("credenciales.json", scopes=scopes)
