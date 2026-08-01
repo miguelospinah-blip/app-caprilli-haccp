@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HACCP Caprilli", page_icon="🍦")
@@ -12,32 +12,17 @@ st.caption("Caprilli Gelateria Naturale")
 
 # --- CONEXIÓN CON GOOGLE SHEETS ---
 def obtener_hoja():
-    scope = [
-        "https://spreadsheets.google.com/feeds",
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
     
-    # Extraemos directamente los campos desde st.secrets
     if "gcp_service_account" in st.secrets:
-        info = st.secrets["gcp_service_account"]
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     else:
-        info = st.secrets
-
-    # Creamos un diccionario formateado asegurando saltos de línea limpios
-    creds_dict = {
-        "type": info["type"],
-        "project_id": info["project_id"],
-        "private_key_id": info["private_key_id"],
-        "private_key": info["private_key"].replace("\\n", "\n"),
-        "client_email": info["client_email"],
-        "client_id": info["client_id"],
-        "auth_uri": info["auth_uri"],
-        "token_uri": info["token_uri"],
-        "auth_provider_x509_cert_url": info["auth_provider_x509_cert_url"],
-        "client_x509_cert_url": info["client_x509_cert_url"]
-    }
-    
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        creds = Credentials.from_service_account_file("credenciales.json", scopes=scopes)
+        
     client = gspread.authorize(creds)
     return client.open("Base_Datos_HACCP").sheet1
 
@@ -119,28 +104,24 @@ with st.form(key=f"form_haccp_{sede}"):
         st.divider()
         st.write("⚙️ **Macchine di Lavorazione / Pastorizzazione:**")
         
-        # 1. Mantecatore 2
         uso_m2 = st.checkbox("Mantecatore 2 (Yogurt/Conservazione) in uso", value=True)
         if uso_m2:
             lecturas["Mantecatore 2"] = st.number_input("Temp. Mantecatore 2 (°C)", value=4.0, step=0.5, format="%.1f")
         else:
             lecturas["Mantecatore 2"] = "Non in uso"
 
-        # 2. Pastorizzatore 1 Icetech
         uso_past1 = st.checkbox("Pastorizzatore 1 (Icetech) in uso", value=True)
         if uso_past1:
             lecturas["Pastorizzatore 1 Icetech"] = st.number_input("Temp. Pastorizzatore 1 (°C)", value=4.0, step=0.5, format="%.1f")
         else:
             lecturas["Pastorizzatore 1 Icetech"] = "Non in uso"
 
-        # 3. Pastorizzatore 2 Carpigiani
         uso_past2 = st.checkbox("Pastorizzatore 2 (Carpigiani) in uso", value=True)
         if uso_past2:
             lecturas["Pastorizzatore 2 (Carpigiani)"] = st.number_input("Temp. Pastorizzatore 2 (°C)", value=4.0, step=0.5, format="%.1f")
         else:
             lecturas["Pastorizzatore 2 (Carpigiani)"] = "Non in uso"
 
-        # 4. Pastochef
         uso_pastochef = st.checkbox("Pastochef (Yogurt/Creme) in uso", value=True)
         if uso_pastochef:
             lecturas["Pastochef"] = st.number_input("Temp. Pastochef (°C)", value=4.0, step=0.5, format="%.1f")
@@ -150,13 +131,11 @@ with st.form(key=f"form_haccp_{sede}"):
     elif sede == "Laboratorio Cioccolato":
         st.write("🌡️ **Inserisci le temperature (Laboratorio Cioccolato):**")
         
-        # Equipos Fríos / Conservación
         lecturas["Frigo 1"] = st.number_input("Frigo 1 (°C)", value=-13.0, step=0.5, format="%.1f")
         lecturas["Frigo 2"] = st.number_input("Frigo 2 (°C)", value=-13.0, step=0.5, format="%.1f")
         lecturas["Frigo 3"] = st.number_input("Frigo 3 (°C)", value=-13.0, step=0.5, format="%.1f")
         lecturas["Frigo 4"] = st.number_input("Frigo 4 (°C)", value=-13.0, step=0.5, format="%.1f")
-        lecturas["Congelatore"] = st.number_input("Cngelatore (°C)", value=-13.0, step=0.5, format="%.1f")
-     
+        lecturas["Congelatore"] = st.number_input("Congelatore (°C)", value=-13.0, step=0.5, format="%.1f")
 
     elif sede == "Laboratorio Pasticceria":
         st.write("🌡️ **Inserisci le temperature del locale (Laboratorio Pasticceria):**")
@@ -170,7 +149,6 @@ with st.form(key=f"form_haccp_{sede}"):
     if submit:
         ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Estructuramos las filas para la base de datos (incluyendo la evaluación interna Stato)
         filas_nuevas = []
         for equipo, temp in lecturas.items():
             stato_temp = evaluar_temperatura(equipo, temp)
@@ -180,8 +158,6 @@ with st.form(key=f"form_haccp_{sede}"):
         
         try:
             hoja = obtener_hoja()
-            
-            # Insertamos fila por fila al final del Google Sheet
             for fila in filas_nuevas:
                 hoja.append_row(fila)
             
