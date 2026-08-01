@@ -10,15 +10,40 @@ st.set_page_config(page_title="HACCP Caprilli", page_icon="🍦")
 st.title("Controllo Temperature HACCP 🍦")
 st.caption("Caprilli Gelateria Naturale")
 
-# --- CONEXIÓN CON GOOGLE SHEETS (VÍA SERVICE ACCOUNT) ---
+# --- CONEXIÓN CON GOOGLE SHEETS ---
 def obtener_hoja():
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive"
     ]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+    if "gcp_service_account" in st.secrets:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    else:
+        creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+        
     client = gspread.authorize(creds)
     return client.open("Base_Datos_HACCP").sheet1
+
+# --- EVALUACIÓN INTERNA PARA EL REGISTRO HACCP ---
+def evaluar_temperatura(equipo, valor):
+    if valor == "Non in uso":
+        return "Non in uso"
+    
+    val = float(valor)
+    equipo_lower = equipo.lower()
+
+    # Congeladores, Vaschette, Vetrine, Banche o Celli Negativi (Límite máximo -10.0°C)
+    if any(k in equipo_lower for k in ["conservatore", "congelatore", "vetrina", "banco", "cella"]):
+        if "cioccolato" not in equipo_lower and "latte" not in equipo_lower and "materie" not in equipo_lower:
+            return "⚠ FUORI NORMA" if val > -10.0 else "OK Congelatore"
+
+    # Maquinaria en Caliente / Atemperadoras (Laboratorio Cioccolato)
+    if "scioglitrice" in equipo_lower or "temperatrice" in equipo_lower:
+        return "⚠ FUORI NORMA" if (val < 20.0 or val > 50.0) else "OK Caldo"
+
+    # Frigos normales / Materias Primas / Refrigeración (Límite máximo +6.0°C)
+    return "⚠ FUORI NORMA" if val > 6.0 else "OK Frigo"
 
 # --- 2. SELECTOR DE SEDE ---
 sede = st.selectbox("Seleziona la sede / reparto:", [
@@ -72,8 +97,8 @@ with st.form(key=f"form_haccp_{sede}"):
         st.write("🌡️ **Inserisci le temperature (Laboratorio Gelato):**")
         lecturas["Conservatore Negativo 1"] = st.number_input("Conservatore Negativo 1 (°C)", value=-13.0, step=0.5, format="%.1f")
         lecturas["Conservatore Negativo 2"] = st.number_input("Conservatore Negativo 2 (°C)", value=-13.0, step=0.5, format="%.1f")
-        lecturas["Frigo Latte 1"]           = st.number_input("Frigo Latte/Materie Prime 1 (°C)", value=4.0, step=0.5, format="%.1f")
-        lecturas["Frigo Latte 2"]           = st.number_input("Frigo Latte/Materie Prime 2 (°C)", value=4.0, step=0.5, format="%.1f")
+        lecturas["Frigo Materie prime 1"]   = st.number_input("Frigo Latte/Materie Prime 1 (°C)", value=4.0, step=0.5, format="%.1f")
+        lecturas["Frigo Materie prime 2"]   = st.number_input("Frigo Latte/Materie Prime 2 (°C)", value=4.0, step=0.5, format="%.1f")
         
         st.divider()
         st.write("⚙️ **Macchine di Lavorazione / Pastorizzazione:**")
@@ -108,7 +133,14 @@ with st.form(key=f"form_haccp_{sede}"):
 
     elif sede == "Laboratorio Cioccolato":
         st.write("🌡️ **Inserisci le temperature (Laboratorio Cioccolato):**")
-        lecturas["Frigo Cioccolato"] = st.number_input("Frigo Cioccolato (°C)", value=14.0, step=0.5, format="%.1f")
+        
+        # Equipos Fríos / Conservación
+        lecturas["Frigo 1"] = st.number_input("Frigo 1 (°C)", value=-13.0, step=0.5, format="%.1f")
+        lecturas["Frigo 2"] = st.number_input("Frigo 2 (°C)", value=-13.0, step=0.5, format="%.1f")
+        lecturas["Frigo 3"] = st.number_input("Frigo 3 (°C)", value=-13.0, step=0.5, format="%.1f")
+        lecturas["Frigo 4"] = st.number_input("Frigo 4 (°C)", value=-13.0, step=0.5, format="%.1f")
+        lecturas["Congelatore"] = st.number_input("Cngelatore (°C)", value=-13.0, step=0.5, format="%.1f")
+     
 
     elif sede == "Laboratorio Pasticceria":
         st.write("🌡️ **Inserisci le temperature del locale (Laboratorio Pasticceria):**")
@@ -122,12 +154,13 @@ with st.form(key=f"form_haccp_{sede}"):
     if submit:
         ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Estructuramos las filas para la base de datos
+        # Estructuramos las filas para la base de datos (incluyendo la evaluación interna Stato)
         filas_nuevas = []
         for equipo, temp in lecturas.items():
-            filas_nuevas.append([ahora, sede, equipo, str(temp), operatore])
+            stato_temp = evaluar_temperatura(equipo, temp)
+            filas_nuevas.append([ahora, sede, equipo, str(temp), operatore, stato_temp])
         
-        df_nuevo = pd.DataFrame(filas_nuevas, columns=["Fecha_Hora", "Sede", "Equipo", "Temperatura", "Operatore"])
+        df_nuevo = pd.DataFrame(filas_nuevas, columns=["Fecha_Hora", "Sede", "Equipo", "Temperatura", "Operatore", "Stato"])
         
         try:
             hoja = obtener_hoja()
@@ -140,5 +173,5 @@ with st.form(key=f"form_haccp_{sede}"):
             st.dataframe(df_nuevo)
             
         except Exception as e:
-            st.error("❌ Error al conectar con Google Sheets. Verifica el archivo credenciales.json o los permisos.")
+            st.error("❌ Errore durante il salvataggio nel database.")
             st.exception(e)
