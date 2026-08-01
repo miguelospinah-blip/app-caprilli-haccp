@@ -17,18 +17,27 @@ def obtener_hoja():
         "https://www.googleapis.com/auth/drive"
     ]
     
-    # Intenta primero con st.secrets (Nube)
-    try:
-        if "gcp_service_account" in st.secrets:
-            creds_dict = dict(st.secrets["gcp_service_account"])
-        else:
-            creds_dict = dict(st.secrets)
-            
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    # Si falla st.secrets (Local en Mac), recurre al archivo credenciales.json
-    except Exception:
-        creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
-        
+    # Extraemos directamente los campos desde st.secrets
+    if "gcp_service_account" in st.secrets:
+        info = st.secrets["gcp_service_account"]
+    else:
+        info = st.secrets
+
+    # Creamos un diccionario formateado asegurando saltos de línea limpios
+    creds_dict = {
+        "type": info["type"],
+        "project_id": info["project_id"],
+        "private_key_id": info["private_key_id"],
+        "private_key": info["private_key"].replace("\\n", "\n"),
+        "client_email": info["client_email"],
+        "client_id": info["client_id"],
+        "auth_uri": info["auth_uri"],
+        "token_uri": info["token_uri"],
+        "auth_provider_x509_cert_url": info["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": info["client_x509_cert_url"]
+    }
+    
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     return client.open("Base_Datos_HACCP").sheet1
 
