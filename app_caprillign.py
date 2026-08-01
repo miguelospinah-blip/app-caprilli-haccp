@@ -16,9 +16,18 @@ def obtener_hoja():
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive"
     ]
-    if "gcp_service_account" in st.secrets:
-        creds_dict = dict(st.secrets["gcp_service_account"])
+    
+    # 1. Intenta leer primero desde los Secrets de Streamlit Cloud
+    if len(st.secrets) > 0:
+        if "gcp_service_account" in st.secrets:
+            creds_dict = dict(st.secrets["gcp_service_account"])
+        else:
+            # Si pegaste el JSON entero directamente en Secrets
+            creds_dict = dict(st.secrets)
+            
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        
+    # 2. Si no hay secrets (ejecución en tu Mac), busca el archivo local
     else:
         creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
         
