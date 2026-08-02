@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import gspread
+import base64
+import json
+import tomllib
 from google.oauth2.service_account import Credentials
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -17,18 +20,26 @@ def obtener_hoja():
         "https://www.googleapis.com/auth/drive"
     ]
     
-    if "gcp_service_account" in st.secrets:
-        # Convertimos st.secrets a un diccionario estándar
-        creds_dict = dict(st.secrets["gcp_service_account"])
+    # 1. Autenticación en Streamlit Cloud mediante la clave Base64 en Secrets
+    if "GCP_CREDENTIALS_BASE64" in st.secrets:
+        base64_str = st.secrets["GCP_CREDENTIALS_BASE64"]
+        decoded_str = base64.b64decode(base64_str).decode("utf-8")
         
-        # Limpieza profunda de la private_key para corregir formato PEM
-        pk = str(creds_dict["private_key"])
-        pk = pk.replace("\\n", "\n").replace("\r", "")
-        if not pk.endswith("\n"):
-            pk += "\n"
-        creds_dict["private_key"] = pk
-        
+        # Procesa si el contenido decodificado está en formato JSON o TOML
+        try:
+            creds_dict = json.loads(decoded_str)
+        except Exception:
+            creds_dict = tomllib.loads(decoded_str)
+            if "gcp_service_account" in creds_dict:
+                creds_dict = creds_dict["gcp_service_account"]
+                
+        # Asegura el formato correcto de los saltos de línea de la clave privada
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+            
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        
+    # 2. Autenticación local en Mac usando el archivo credenciales.json
     else:
         creds = Credentials.from_service_account_file("credenciales.json", scopes=scopes)
         
