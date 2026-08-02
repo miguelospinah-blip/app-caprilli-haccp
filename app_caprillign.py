@@ -1,11 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import gspread
-import base64
-import json
-import tomllib
-from google.oauth2.service_account import Credentials
+from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HACCP Caprilli", page_icon="🍦")
@@ -13,38 +9,8 @@ st.set_page_config(page_title="HACCP Caprilli", page_icon="🍦")
 st.title("Controllo Temperature HACCP 🍦")
 st.caption("Caprilli Gelateria Naturale")
 
-# --- CONEXIÓN CON GOOGLE SHEETS ---
-def obtener_hoja():
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    
-    # 1. Autenticación en Streamlit Cloud mediante la clave Base64 en Secrets
-    if "GCP_CREDENTIALS_BASE64" in st.secrets:
-        base64_str = st.secrets["GCP_CREDENTIALS_BASE64"]
-        decoded_str = base64.b64decode(base64_str).decode("utf-8")
-        
-        # Procesa si el contenido decodificado está en formato JSON o TOML
-        try:
-            creds_dict = json.loads(decoded_str)
-        except Exception:
-            creds_dict = tomllib.loads(decoded_str)
-            if "gcp_service_account" in creds_dict:
-                creds_dict = creds_dict["gcp_service_account"]
-                
-        # Asegura el formato correcto de los saltos de línea de la clave privada
-        if "private_key" in creds_dict:
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-            
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        
-    # 2. Autenticación local en Mac usando el archivo credenciales.json
-    else:
-        creds = Credentials.from_service_account_file("credenciales.json", scopes=scopes)
-        
-    client = gspread.authorize(creds)
-    return client.open("Base_Datos_HACCP").sheet1
+# --- CONEXIÓN DIRECTA CON GOOGLE SHEETS ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- EVALUACIÓN INTERNA PARA EL REGISTRO HACCP ---
 def evaluar_temperatura(equipo, valor):
@@ -54,16 +20,13 @@ def evaluar_temperatura(equipo, valor):
     val = float(valor)
     equipo_lower = equipo.lower()
 
-    # Congeladores, Vaschette, Vetrine, Banche o Celli Negativi (Límite máximo -10.0°C)
     if any(k in equipo_lower for k in ["conservatore", "congelatore", "vetrina", "banco", "cella"]):
         if "cioccolato" not in equipo_lower and "latte" not in equipo_lower and "materie" not in equipo_lower:
             return "⚠ FUORI NORMA" if val > -10.0 else "OK Congelatore"
 
-    # Maquinaria en Caliente / Atemperadoras (Laboratorio Cioccolato)
     if "scioglitrice" in equipo_lower or "temperatrice" in equipo_lower:
         return "⚠ FUORI NORMA" if (val < 20.0 or val > 50.0) else "OK Caldo"
 
-    # Frigos normales / Materias Primas / Refrigeración (Límite máximo +6.0°C)
     return "⚠ FUORI NORMA" if val > 6.0 else "OK Frigo"
 
 # --- 2. SELECTOR DE SEDE ---
@@ -84,7 +47,6 @@ with st.form(key=f"form_haccp_{sede}"):
     
     lecturas = {}
     
-    # Maquinaria específica por Sede
     if sede == "Viale Italia":
         st.write("🌡️ **Inserisci le temperature del locale (Viale Italia):**")
         lecturas["Vetrina 1"] = st.number_input("Vetrina 1 (°C)", value=-18.0, step=0.5, format="%.1f")
@@ -164,7 +126,6 @@ with st.form(key=f"form_haccp_{sede}"):
         lecturas["Cella 2"] = st.number_input("Cella 2 (°C)", value=-18.0, step=0.5, format="%.1f")
         lecturas["Frigo armadietti"]  = st.number_input("Frigo armadietti (°C)", value=-15.0, step=0.5, format="%.1f")
 
-    # BOTÓN ÚNICO DE ENVÍO
     submit = st.form_submit_button("🚀 Invia e Salva Registro")
     if submit:
         ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -172,14 +133,22 @@ with st.form(key=f"form_haccp_{sede}"):
         filas_nuevas = []
         for equipo, temp in lecturas.items():
             stato_temp = evaluar_temperatura(equipo, temp)
-            filas_nuevas.append([ahora, sede, equipo, str(temp), operatore, stato_temp])
+            filas_nuevas.append({
+                "Fecha_Hora": ahora,
+                "Sede": sede,
+                "Equipo": equipo,
+                "Temperatura": str(temp),
+                "Operatore": operatore,
+                "Stato": stato_temp
+            })
         
-        df_nuevo = pd.DataFrame(filas_nuevas, columns=["Fecha_Hora", "Sede", "Equipo", "Temperatura", "Operatore", "Stato"])
+        df_nuevo = pd.DataFrame(filas_nuevas)
         
         try:
-            hoja = obtener_hoja()
-            for fila in filas_nuevas:
-                hoja.append_row(fila)
+            # Lee datos existentes y añade las filas nuevas
+            existing_data = conn.read(worksheet="Foglio1", ttl=0)
+            updated_df = pd.concat([existing_data, df_nuevo], ignore_index=True)
+            conn.update(worksheet="Foglio1", data=updated_df)
             
             st.success(f"✅ Registrate con successo {len(lecturas)} temperature per {sede}!")
             st.dataframe(df_nuevo)
