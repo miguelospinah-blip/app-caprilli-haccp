@@ -20,13 +20,16 @@ def evaluar_temperatura(equipo, valor):
     val = float(valor)
     equipo_lower = equipo.lower()
 
+    # Congeladores, Vaschette, Vetrine, Banche o Celli Negativi (Límite máximo -10.0°C)
     if any(k in equipo_lower for k in ["conservatore", "congelatore", "vetrina", "banco", "cella"]):
         if "cioccolato" not in equipo_lower and "latte" not in equipo_lower and "materie" not in equipo_lower:
             return "⚠ FUORI NORMA" if val > -10.0 else "OK Congelatore"
 
+    # Maquinaria en Caliente / Atemperadoras (Laboratorio Cioccolato)
     if "scioglitrice" in equipo_lower or "temperatrice" in equipo_lower:
         return "⚠ FUORI NORMA" if (val < 20.0 or val > 50.0) else "OK Caldo"
 
+    # Frigos normales / Materias Primas / Refrigeración (Límite máximo +6.0°C)
     return "⚠ FUORI NORMA" if val > 6.0 else "OK Frigo"
 
 # --- 2. SELECTOR DE SEDE ---
@@ -47,6 +50,7 @@ with st.form(key=f"form_haccp_{sede}"):
     
     lecturas = {}
     
+    # Maquinaria específica por Sede
     if sede == "Viale Italia":
         st.write("🌡️ **Inserisci le temperature del locale (Viale Italia):**")
         lecturas["Vetrina 1"] = st.number_input("Vetrina 1 (°C)", value=-18.0, step=0.5, format="%.1f")
@@ -126,6 +130,7 @@ with st.form(key=f"form_haccp_{sede}"):
         lecturas["Cella 2"] = st.number_input("Cella 2 (°C)", value=-18.0, step=0.5, format="%.1f")
         lecturas["Frigo armadietti"]  = st.number_input("Frigo armadietti (°C)", value=-15.0, step=0.5, format="%.1f")
 
+    # BOTÓN ÚNICO DE ENVÍO
     submit = st.form_submit_button("🚀 Invia e Salva Registro")
     if submit:
         ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -145,10 +150,10 @@ with st.form(key=f"form_haccp_{sede}"):
         df_nuevo = pd.DataFrame(filas_nuevas)
         
         try:
-            # Lee datos existentes y añade las filas nuevas
-            existing_data = conn.read(worksheet="Foglio1", ttl=0)
+            # Consulta la hoja especificada por su nombre exacto
+            existing_data = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", ttl=0)
             updated_df = pd.concat([existing_data, df_nuevo], ignore_index=True)
-            conn.update(worksheet="Foglio1", data=updated_df)
+            conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", data=updated_df)
             
             st.success(f"✅ Registrate con successo {len(lecturas)} temperature per {sede}!")
             st.dataframe(df_nuevo)
