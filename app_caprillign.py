@@ -6,6 +6,15 @@ from streamlit_gsheets import GSheetsConnection
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HACCP Caprilli", page_icon="🍦")
 
+# --- LOGO Y TÍTULO ---
+col1, col2, col3 = st.columns([1, 2, 1])
+
+with col2:
+    try:
+        st.image("logo.png", use_container_width=True)
+    except Exception:
+        pass 
+
 st.title("Controllo Temperature HACCP 🍦")
 st.caption("Caprilli Gelateria Naturale")
 
@@ -34,6 +43,7 @@ def evaluar_temperatura(equipo, valor):
 
 # --- 2. SELECTOR DE SEDE ---
 sede = st.selectbox("Seleziona la sede / reparto:", [
+    "Seleziona la sede",
     "Laboratorio Cioccolato", 
     "Laboratorio Gelato", 
     "Laboratorio Pasticceria", 
@@ -45,7 +55,7 @@ st.markdown(f"### Registrazione per: **{sede}**")
 
 # --- 3. FORMULARIO UNIFICADO ---
 with st.form(key=f"form_haccp_{sede}"):
-    operatore = st.selectbox("Nome Operatore:", ["Alessandra", "Chiara", "Miguel", "Ricardo", "Tommaso", "Francesco", "Matilde", "Giorgia", "Linda", "Manuel", "Luduvica", "Asia", "Edoardo"])
+    operatore = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome", "Alessandra", "Chiara", "Miguel", "Ricardo", "Tommaso", "Francesco", "Matilde", "Giorgia", "Linda", "Manuel", "Luduvica", "Asia", "Edoardo"])
     st.divider()
     
     lecturas = {}
@@ -56,7 +66,7 @@ with st.form(key=f"form_haccp_{sede}"):
         lecturas["Vetrina 1"] = st.number_input("Vetrina 1 (°C)", value=-18.0, step=0.5, format="%.1f")
         lecturas["Vetrina 2"] = st.number_input("Vetrina 2 (°C)", value=-18.0, step=0.5, format="%.1f")
         lecturas["Vetrina 3"] = st.number_input("Vetrina 3 (°C)", value=-18.0, step=0.5, format="%.1f")
-        lecturas["Frigo Banco"] = st.number_input("Frigo Banco(°C)", value=-18.0, step=0.5, format="%.1f")
+        lecturas["Frigo Banco"] = st.number_input("Frigo Banco (°C)", value=-18.0, step=0.5, format="%.1f")
         lecturas["Banco 1"] = st.number_input("Banco 1 (°C)", value=-18.0, step=0.5, format="%.1f")
         lecturas["Banco 2"] = st.number_input("Banco 2 (°C)", value=-18.0, step=0.5, format="%.1f")
         lecturas["Granite"] = st.number_input("Ganite (°C)", value=-18.0, step=0.5, format="%.1f")
