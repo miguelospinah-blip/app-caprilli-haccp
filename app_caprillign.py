@@ -11,7 +11,7 @@ col1, col2, col3 = st.columns([1, 2, 1])
 
 with col2:
     try:
-        st.image("logo.png", use_container_width=True)
+        st.image("Logo.png", use_container_width=True)
     except Exception:
         pass 
 
