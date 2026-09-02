@@ -57,6 +57,14 @@ st.divider()
 # --- CONEXIÓN DIRECTA CON GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# Aseguramos que la clave privada cargue los saltos de línea correctamente si vienen alterados
+try:
+    if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+        if "private_key" in st.secrets["connections"]["gsheets"]:
+            st.secrets["connections"]["gsheets"]["private_key"] = st.secrets["connections"]["gsheets"]["private_key"].replace("\\n", "\n")
+except Exception:
+    pass
+
 # --- EVALUACIÓN INTERNA PARA EL REGISTRO HACCP ---
 def evaluar_temperatura(equipo, valor):
     if valor == "Non in uso":
