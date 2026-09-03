@@ -229,45 +229,24 @@ if rol == "Operatore (Base)":
                             st.error("❌ Errore durante il salvataggio nel database.")
                             st.exception(e)
 
-    # --- SUB-MODO: MENÚ DE PRODUCCIÓN ---
-    elif st.session_state.modo_operatore == "produzione_menu":
-        if st.button("⬅ Torna al Menu Principale"):
-            st.session_state.modo_operatore = "menu"
-            st.rerun()
-            
-        st.markdown("### 🏭 Seleziona il Laboratorio per la Produzione:")
-        
-        col_p1, col_p2, col_p3 = st.columns(3)
-        with col_p1:
-            if st.button("🍦 Laboratorio Gelato", use_container_width=True):
-                st.session_state.modo_operatore = "prod_gelato"
-                st.rerun()
-        with col_p2:
-            if st.button("🍫 Laboratorio Cioccolato", use_container_width=True):
-                st.info("Modulo in sviluppo.")
-        with col_p3:
-            if st.button("🍰 Laboratorio Pasticceria", use_container_width=True):
-                st.info("Modulo in sviluppo.")
-
-    # --- SUB-MODO: PRODUCCIÓN LABORATORIO GELATO (Simplificado) ---
+# --- SUB-MODO: PRODUCCIÓN LABORATORIO GELATO (Automatizado con Lote) ---
     elif st.session_state.modo_operatore == "prod_gelato":
         if st.button("⬅ Torna ai Laboratori"):
             st.session_state.modo_operatore = "produzione_menu"
             st.rerun()
             
         st.markdown("### 🍦 Registrazione Produzione - Laboratorio Gelato")
-        st.info("💡 Inserisci semplicemente il gusto e i chili totali prodotti secondo la pesata.")
+        st.info("💡 Il codice lotto viene generato automaticamente in stile bilancia in base all'orario di registrazione.")
         
         with st.form("form_prod_gelato"):
             op_gelato = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome", "Alessandra", "Chiara", "Miguel", "Antonio", "Ricardo", "Tommaso", "Francesco", "Matilde", "Giorgia", "Linda", "Manuel", "Luduvica", "Asia", "Edoardo"])
             
             sapore = st.selectbox("Seleziona Gusto / Preparazione:", [
-                "Crema Diretta", "Pistacchio", "Cioccolato Fondente", "Nocciola", "Fior di latte", 
-                "Stracciatella", "Brownie", "Cocco", "Meglio della Nutella", "Frutti di Bosco", "Caramello Salato", "Sciroppo / Base"
+                "Limone", "Mango", "Pesca", "Mora", "Mirtillo", "Fico", "YMN", "Fior di latte", "Stracciatella", "Cocco", "Crema Diretta", "Crema Caprilli", "Vaniglia", "Mascarpone", "CheeseCake", "Tamaro", "Nocciola", "Pistacchio", "Caramello", "Burro di Arachidi", "Meglio della Nutela", "Caffe", "Cioccolato al latte", "Fondente", "Liquiritzia", "Yogurt Soft", "Yogurt", "Caramello Mou", "Caramello Salato", "Sciroppo Frutta/Yogurt", "Infuso Caffe", "Granita Anguria", "Granita Limone", "Granita Mandorla", "Granita Caffe", "Granita Menta", "Granita Fragola", "Granita Lampone", "Granita Pera", "Granita Pesca", "Granita Melone", "Granita Mela Verde"
             ])
             
             kili = st.number_input("Chili totali prodotti (Kg):", min_value=0.5, max_value=100.0, value=11.0, step=0.5)
-            note_prod = st.text_area("Note o numero lotto (opzionale):")
+            note_prod = st.text_area("Note aggiuntive (opzionale):")
             
             submit_prod = st.form_submit_button("💾 Salva Produzione")
             
@@ -275,25 +254,37 @@ if rol == "Operatore (Base)":
                 if op_gelato == "Seleziona il tuo nome":
                     st.error("❌ Per favore, seleziona il tuo nome operatore.")
                 else:
-                    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    # Generamos la fecha y hora actual
+                    ahora_dt = datetime.now()
+                    ahora_str = ahora_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    # Generación automática del lote idéntico al de la báscula: L + Año(2) + Día del año(3) + HoraMinuto(4)
+                    # Ejemplo: L + 26 + 246 + 1326 = L262461326
+                    anio_dos_digitos = ahora_dt.strftime("%y")
+                    dia_juliano = ahora_dt.strftime("%j")
+                    hora_minuto = ahora_dt.strftime("%H%M")
+                    lotto_automatico = f"L{anio_dos_digitos}{dia_juliano}{hora_minuto}"
+                    
+                    # Combinamos el lote generado con cualquier nota extra si el operador la escribió
+                    nota_final = lotto_automatico if not note_prod else f"{lotto_automatico} - {note_prod}"
+
                     df_prod = pd.DataFrame([{
-                        "Data_Ora": ahora,
+                        "Data_Ora": ahora_str,
+                        "Note": nota_final, # Aquí se guarda el lote generado de forma automática
                         "Reparto": "Laboratorio Gelato",
-                        "Operatore": op_gelato,
                         "Prodotto_Gusto": sapore,
                         "Kili_Prodotti": kili,
-                        "Note": note_prod
+                        "Operatore": op_gelato
                     }])
                     
                     try:
                         ex_prod = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
                         conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", data=pd.concat([ex_prod, df_prod], ignore_index=True))
-                        st.success(f"✅ Registrati {kili} Kg di '{sapore}' con successo!")
+                        st.success(f"✅ Registrati {kili} Kg di '{sapore}' con lotto automatico: **{lotto_automatico}**!")
                         st.dataframe(df_prod)
                     except Exception as e:
-                        st.error("❌ Errore: Assicurati che esista un foglio chiamato 'Produzione_Gelato' nel tuo Google Sheets.")
+                        st.error("❌ Errore durante il salvataggio nel database.")
                         st.exception(e)
-
 
 # =====================================================================
 # VISTA 2: ROL LEADER / JEFE (Dashboard BI + Consulta)
