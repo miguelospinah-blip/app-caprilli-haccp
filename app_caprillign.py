@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -307,63 +307,138 @@ if rol == "Operatore (Base)":
                         st.exception(e)
 
 # =====================================================================
-# VISTA 2: ROL LEADER / JEFE (Dashboard BI + Consulta)
+# VISTA 2: ROL LEADER / JEFE (Dashboard BI + Consulta Avanzada)
 # =====================================================================
 elif rol == "Leader (Consultazione)":
     st.subheader("📊 Dashboard Direttiva & Business Intelligence")
-    st.info("Benvenuto Capo! Panoramica in tempo reale delle temperature e della produzione.")
+    st.info("Benvenuto Capo! Panoramica avanzata delle temperature e della produzione.")
     
     tab_temp, tab_prod = st.tabs(["🌡️ Monitoraggio Temperature", "🍦 Analisi Produzione (Kili)"])
     
+    # --- PESTAÑA 1: TEMPERATURE CON FILTRO DE MES ---
     with tab_temp:
+        st.markdown("### 🌡️ Filtro Tempi e Temperature")
         try:
             df_temp = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", ttl=0)
             
             if not df_temp.empty:
-                total_registros = len(df_temp)
-                fuori_norma = len(df_temp[df_temp["Stato"] == "⚠ FUORI NORMA"]) if "Stato" in df_temp.columns else 0
-                conformita = ((total_registros - fuori_norma) / total_registros) * 100 if total_registros > 0 else 100
+                # Asegurar formato fecha
+                df_temp["Fecha_Hora_dt"] = pd.to_datetime(df_temp["Fecha_Hora"], errors="coerce")
                 
-                col_k1, col_k2, col_k3 = st.columns(3)
-                col_k1.metric("Registri Totali", total_registros)
-                col_k2.metric("Fuori Norma", fuori_norma, delta_color="inverse" if fuori_norma > 0 else "normal")
-                col_k3.metric("Conformità HACCP", f"{conformita:.1f}%")
+                # Obtener mes y año actual
+                hoy = datetime.now()
+                mes_actual_num = hoy.month
+                anio_actual_num = hoy.year
+                
+                # Selector de mes
+                col_f1, col_f2 = st.columns(2)
+                with col_f1:
+                    mes_sel = st.selectbox(
+                        "Seleziona Mese:", 
+                        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 
+                        index=mes_actual_num - 1,
+                        format_func=lambda x: ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"][x-1]
+                    )
+                with col_f2:
+                    anio_sel = st.number_input("Anno:", min_value=2024, max_value=2030, value=anio_actual_num)
+                
+                # Filtrar dataframe por el mes y año seleccionados
+                df_temp_filtrado = df_temp[
+                    (df_temp["Fecha_Hora_dt"].dt.month == mes_sel) & 
+                    (df_temp["Fecha_Hora_dt"].dt.year == anio_sel)
+                ]
                 
                 st.divider()
-                st.markdown("### 📈 Stato dei Registri per Sede")
-                if "Sede" in df_temp.columns:
-                    conteo_sedes = df_temp["Sede"].value_counts()
-                    st.bar_chart(conteo_sedes)
                 
-                st.write("📋 **Ultimi registri inseriti:**")
-                st.dataframe(df_temp.tail(10), use_container_width=True)
+                if not df_temp_filtrado.empty:
+                    total_registros = len(df_temp_filtrado)
+                    fuori_norma = len(df_temp_filtrado[df_temp_filtrado["Stato"] == "⚠ FUORI NORMA"]) if "Stato" in df_temp_filtrado.columns else 0
+                    conformita = ((total_registros - fuori_norma) / total_registros) * 100 if total_registros > 0 else 100
+                    
+                    col_k1, col_k2, col_k3 = st.columns(3)
+                    col_k1.metric("Registri nel Mese", total_registros)
+                    col_k2.metric("Fuori Norma", fuori_norma, delta_color="inverse" if fuori_norma > 0 else "normal")
+                    col_k3.metric("Conformità HACCP", f"{conformita:.1f}%")
+                    
+                    st.divider()
+                    st.markdown(f"### 📈 Stato dei Registri per Sede ({mes_sel}/{anio_sel})")
+                    if "Sede" in df_temp_filtrado.columns:
+                        conteo_sedes = df_temp_filtrado["Sede"].value_counts()
+                        st.bar_chart(conteo_sedes)
+                    
+                    st.write(f"📋 **Storico temperature selezionate ({mes_sel}/{anio_sel}):**")
+                    st.dataframe(df_temp_filtrado.drop(columns=["Fecha_Hora_dt"]).tail(15), use_container_width=True)
+                else:
+                    st.warning(f"⚠️ Nessun dato sulle temperature trovato per il mese {mes_sel}/{anio_sel}.")
             else:
-                st.warning("Nessun dato sulle temperature trovato.")
+                st.warning("Nessun dato sulle temperature trovato nel database.")
         except Exception as e:
-            st.warning("Caricamento dati temperature in corso...")
+            st.warning("Errore nel caricamento dati temperature.")
+            st.exception(e)
 
+    # --- PESTAÑA 2: PRODUCCIÓN CON FILTRO DE DÍA Y MES ---
     with tab_prod:
+        st.markdown("### 🍦 Filtro Produzione (Giornaliera o Mensile)")
         try:
             df_prod_bi = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
             
             if not df_prod_bi.empty:
-                total_kili = df_prod_bi["Kili_Prodotti"].sum() if "Kili_Prodotti" in df_prod_bi.columns else 0
-                total_lotti = len(df_prod_bi)
+                # Asegurar formato fecha
+                df_prod_bi["Data_Ora_dt"] = pd.to_datetime(df_prod_bi["Data_Ora"], errors="coerce")
                 
-                col_p1, col_p2 = st.columns(2)
-                col_p1.metric("Chili Totali Prodotti", f"{total_kili} Kg")
-                col_p2.metric("Lotti Registrati", total_lotti)
+                # Opciones de visualización
+                tipo_vista = st.radio("Visualizza per:", ["Giorno specifico", "Intero Mese"], horizontal=True)
                 
+                if tipo_vista == "Giorno specifico":
+                    data_selezionata = st.date_input("Seleziona la data:", value=date.today())
+                    
+                    # Filtrar por día exacto
+                    df_prod_filtrado = df_prod_bi[
+                        df_prod_bi["Data_Ora_dt"].dt.date == data_selezionata
+                    ]
+                    titulo_filtro = f"del giorno {data_selezionata.strftime('%d/%m/%Y')}"
+                else:
+                    hoy = datetime.now()
+                    col_pm1, col_pm2 = st.columns(2)
+                    with col_pm1:
+                        mes_prod_sel = st.selectbox(
+                            "Mese Produzione:", 
+                            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 
+                            index=hoy.month - 1,
+                            format_func=lambda x: ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"][x-1],
+                            key="mes_prod"
+                        )
+                    with col_pm2:
+                        anio_prod_sel = st.number_input("Anno Produzione:", min_value=2024, max_value=2030, value=hoy.year, key="anio_prod")
+                    
+                    df_prod_filtrado = df_prod_bi[
+                        (df_prod_bi["Data_Ora_dt"].dt.month == mes_prod_sel) & 
+                        (df_prod_bi["Data_Ora_dt"].dt.year == anio_prod_sel)
+                    ]
+                    titulo_filtro = f"del mese {mes_prod_sel}/{anio_prod_sel}"
+
                 st.divider()
-                st.markdown("### 📊 Produzione per Gusto (Kg)")
-                if "Prodotto_Gusto" in df_prod_bi.columns and "Kili_Prodotti" in df_prod_bi.columns:
-                    df_gusti = df_prod_bi.groupby("Prodotto_Gusto")["Kili_Prodotti"].sum()
-                    st.bar_chart(df_gusti)
                 
-                st.write("📋 **Storico Produzioni:**")
-                st.dataframe(df_prod_bi.tail(15), use_container_width=True)
+                if not df_prod_filtrado.empty:
+                    total_kili = df_prod_filtrado["Kili_Prodotti"].sum() if "Kili_Prodotti" in df_prod_filtrado.columns else 0
+                    total_lotti = len(df_prod_filtrado)
+                    
+                    col_p1, col_p2 = st.columns(2)
+                    col_p1.metric(f"Chili Prodotti ({titulo_filtro})", f"{total_kili} Kg")
+                    col_p2.metric("Lotti Registrati", total_lotti)
+                    
+                    st.divider()
+                    st.markdown(f"### 📊 Produzione per Gusto (Kg) - {titulo_filtro}")
+                    if "Prodotto_Gusto" in df_prod_filtrado.columns and "Kili_Prodotti" in df_prod_filtrado.columns:
+                        df_gusti = df_prod_filtrado.groupby("Prodotto_Gusto")["Kili_Prodotti"].sum()
+                        st.bar_chart(df_gusti)
+                    
+                    st.write(f"📋 **Storico Produzioni ({titulo_filtro}):**")
+                    st.dataframe(df_prod_filtrado.drop(columns=["Data_Ora_dt"]), use_container_width=True)
+                else:
+                    st.info(f"ℹ️ Non ci sono registrazioni di produzione {titulo_filtro}.")
             else:
-                st.info("ℹ️ Non ci sono ancora registrazioni di produzione nel foglio 'Produzione_Gelato'.")
+                st.info("ℹ️ Non ci sono ancora registrazioni nel foglio 'Produzione_Gelato'.")
         except Exception as e:
             st.warning("Assicurati che esista il foglio 'Produzione_Gelato' nel tuo Google Sheets.")
 
