@@ -91,6 +91,7 @@ if rol == "Operatore (Base)":
     if 'modo_operatore' not in st.session_state:
         st.session_state.modo_operatore = "menu"
 
+    # --- MENÚ PRINCIPAL DEL OPERADOR ---
     if st.session_state.modo_operatore == "menu":
         st.markdown("### Seleziona l'attività da svolgere:")
         
@@ -229,7 +230,27 @@ if rol == "Operatore (Base)":
                             st.error("❌ Errore durante il salvataggio nel database.")
                             st.exception(e)
 
-# --- SUB-MODO: PRODUCCIÓN LABORATORIO GELATO (Automatizado con Lote) ---
+    # --- SUB-MODO: MENÚ DE PRODUCCIÓN ---
+    elif st.session_state.modo_operatore == "produzione_menu":
+        if st.button("⬅ Torna al Menu Principale"):
+            st.session_state.modo_operatore = "menu"
+            st.rerun()
+            
+        st.markdown("### 🏭 Seleziona il Laboratorio per la Produzione:")
+        
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            if st.button("🍦 Laboratorio Gelato", use_container_width=True):
+                st.session_state.modo_operatore = "prod_gelato"
+                st.rerun()
+        with col_p2:
+            if st.button("🍫 Laboratorio Cioccolato", use_container_width=True):
+                st.info("Modulo in sviluppo.")
+        with col_p3:
+            if st.button("🍰 Laboratorio Pasticceria", use_container_width=True):
+                st.info("Modulo in sviluppo.")
+
+    # --- SUB-MODO: PRODUCCIÓN LABORATORIO GELATO (Automatizado con Lote) ---
     elif st.session_state.modo_operatore == "prod_gelato":
         if st.button("⬅ Torna ai Laboratori"):
             st.session_state.modo_operatore = "produzione_menu"
@@ -259,7 +280,6 @@ if rol == "Operatore (Base)":
                     ahora_str = ahora_dt.strftime("%Y-%m-%d %H:%M:%S")
                     
                     # Generación automática del lote idéntico al de la báscula: L + Año(2) + Día del año(3) + HoraMinuto(4)
-                    # Ejemplo: L + 26 + 246 + 1326 = L262461326
                     anio_dos_digitos = ahora_dt.strftime("%y")
                     dia_juliano = ahora_dt.strftime("%j")
                     hora_minuto = ahora_dt.strftime("%H%M")
