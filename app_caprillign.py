@@ -131,7 +131,7 @@ if rol == "Operatore (Base)":
                 st.session_state.modo_operatore = "produzione_menu"
                 st.rerun()
 
-    # --- SUB-MODO: TEMPERATURAS (Tus campos originales exactos) ---
+    # --- SUB-MODO: TEMPERATURAS ---
     elif st.session_state.modo_operatore == "temperatura":
         if st.button("⬅ Torna al Menu Principale"):
             st.session_state.modo_operatore = "menu"
@@ -305,104 +305,85 @@ if rol == "Operatore (Base)":
                     try:
                         ex_prod = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
                         conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", data=pd.concat([ex_prod, df_prod], ignore_index=True))
-                        st.success(f"✅ Registrato '{sapore}' con lotto **{lotto_automatico}**!")
+                        st.success(f"✅ Registrato '{sapore}' ({tipo_gelato_sel}) con lotto **{lotto_automatico}**!")
                     except Exception as e:
                         st.error("❌ Errore.")
                         st.exception(e)
 
-    # --- SUB-MODO: LABORATORIO CIOCCOLATO (Estructura exacta del archivo de tu colega) ---
+    # --- SUB-MODO: LABORATORIO CIOCCOLATO (100% Dinámico y Reactivo) ---
     elif st.session_state.modo_operatore == "prod_cioccolato":
         if st.button("⬅ Torna ai Laboratori"):
             st.session_state.modo_operatore = "produzione_menu"
             st.rerun()
             
         st.markdown("### 🍫 Registrazione Produzione - Laboratorio Cioccolato")
-        st.info("💡 Basato sullo schema ufficiale del reparto cioccolato.")
+        st.info("💡 Campi strutturati ufficiali dinamici per il reparto cioccolato.")
         
-        with st.form("form_prod_cioccolato_strutturato"):
-            op_cioc = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome"] + st.session_state.lista_operatori)
-            
-            # Categorías principales del archivo de tu colega
-            categoria_cioc = st.selectbox("Categoria Prodotto:", [
-                "Tavole di cioccolata", "Dragées", "Praline", "Piccola minuteria", "Spalmabili", "Marmellate", "Bon bon gelato"
-            ])
-            
-            # Subcategorías / tipologías condicionales
-            sottocategoria = "Nessuna"
-            if categoria_cioc == "Tavole di cioccolata":
-                sottocategoria = st.selectbox("Sottocategoria:", ["Tavole ripiene", "Tavole con inclusioni", "Tavole lisce"])
-            elif categoria_cioc == "Praline":
-                sottocategoria = st.selectbox("Sottocategoria:", ["Anidre", "Non anidre"])
+        op_cioc = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome"] + st.session_state.lista_operatori)
+        
+        categoria_cioc = st.selectbox("Categoria Prodotto:", [
+            "Tavole di cioccolata", "Dragées", "Praline", "Piccola minuteria", "Spalmabili", "Marmellate", "Bon bon gelato"
+        ])
+        
+        # Subcategoría dinámica y condicional corregida
+        sottocategoria = "Nessuna"
+        if categoria_cioc == "Tavole di cioccolata":
+            sottocategoria = st.selectbox("Tipologia Tavola:", ["Tavole ripiene", "Tavole con inclusioni", "Tavole lisce"])
+        elif categoria_cioc == "Praline":
+            sottocategoria = st.selectbox("Tipologia Pralina:", ["Anidre", "Non anidre"])
+        else:
+            st.markdown(f"📌 *Tipologia per {categoria_cioc}: Standard / Unica*")
 
-            # Nombre de la referenza / ID libre
-            nome_referenza = st.text_input("ID / Nome Referenza / Gusto:")
-            
-            # Recurrencia / Festividad opcional (Zona Festività)
-            festivita = st.selectbox("Ricorrenza / Festività (opzionale):", [
-                "Nessuna", "Natale", "Pasqua", "Festa della mamma", "Festa del papà", "Epifania", "San Valentino", "Altro"
-            ])
+        nome_referenza = st.text_input("ID / Nome Referenza o Gusto:")
+        
+        festivita = st.selectbox("Ricorrenza / Festività (opzionale):", [
+            "Nessuna", "Natale", "Pasqua", "Festa della mamma", "Festa del papà", "Epifania", "San Valentino", "Altro"
+        ])
 
-            # Cantidad y formato
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                quantita = st.number_input("Quantità prodotta:", min_value=0.1, max_value=1000.0, value=10.0, step=0.5)
-            with col_c2:
-                unita_misura = st.selectbox("Unità di misura:", ["Pezzi", "Kg"])
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            quantita = st.number_input("Quantità prodotta:", min_value=0.1, max_value=1000.0, value=10.0, step=0.5)
+        with col_c2:
+            unita_misura = st.selectbox("Unità di misura:", ["Pezzi", "Kg"])
 
-            modalita_formato = st.selectbox("Modalità / Formato:", [
-                "Pezzo / sfuso", "Confezione a pezzi", "Vasetto a peso", "Uso interno altra produzione"
-            ])
+        modalita_formato = st.selectbox("Modalità / Formato:", [
+            "Pezzo / sfuso", "Confezione a pezzi", "Vasetto a peso", "Uso interno altra produzione"
+        ])
 
-            # Campos condicionales adicionales si es formato confeccionado o vasetto
-            n_confezioni = 0
-            grammi_confezione = 0
-            destinazione_interna = ""
-            if "Confezione" in modalita_formato or "Vasetto" in modalita_formato:
-                n_confezioni = st.number_input("Numero confezioni / vasetti:", min_value=1, max_value=500, value=10)
-                grammi_confezione = st.number_input("Grammi o pezzi per confezione:", min_value=1.0, max_value=5000.0, value=200.0)
-            elif modalita_formato == "Uso interno altra produzione":
-                destinazione_interna = st.text_input("Destinazione interna (es. uova pasquali, soggetti):")
+        n_confezioni = 0
+        grammi_confezione = 0
+        destinazione_interna = ""
+        if "Confezione" in modalita_formato or "Vasetto" in modalita_formato:
+            n_confezioni = st.number_input("Numero confezioni / vasetti:", min_value=1, max_value=500, value=10)
+            grammi_confezione = st.number_input("Grammi o pezzi per confezione:", min_value=1.0, max_value=5000.0, value=200.0)
+        elif modalita_formato == "Uso interno altra produzione":
+            destinazione_interna = st.text_input("Destinazione interna (es. uova pasquali, soggetti di Natale):")
 
-            # Caducidad manual (como pide el documento de tu colega)
-            fecha_scadenza_cioc = st.date_input("Data di Scadenza (inserimento manuale):", value=date.today() + timedelta(days=60))
-            
-            note_cioc = st.text_input("Note opzionali:")
-            
-            submit_cioc = st.form_submit_button("💾 Salva Produzione Cioccolato")
-            if submit_cioc:
-                if op_cioc == "Seleziona il tuo nome" or not nome_referenza:
-                    st.error("❌ Per favore, seleziona l'operatore e inserisci il nome della referenza.")
-                else:
-                    ahora_dt = obtener_tiempo_actual()
-                    ahora_str = ahora_dt.strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    # Lote automático basado en la fecha del día (formato LC + AÑODÍA)
-                    lotto_automatico = f"LC{ahora_dt.strftime('%y%j')}"
-                    
-                    df_cioc = pd.DataFrame([{
-                        "Data_Ora": ahora_str,
-                        "Lotto": lotto_automatico,
-                        "Note_Opzionali": note_cioc,
-                        "Categoria": categoria_cioc,
-                        "Sottocategoria": sottocategoria,
-                        "Prodotto_Gusto": nome_referenza,
-                        "Ricorrenza": festivita,
-                        "Kili_Prodotti": quantita,
-                        "Unita": unita_misura,
-                        "Formato": modalita_formato,
-                        "N_Confezioni": n_confezioni,
-                        "Destinazione_Interna": destinazione_interna,
-                        "Reparto": "Laboratorio Cioccolato",
-                        "Operatore": op_cioc,
-                        "Scadenza": fecha_scadenza_cioc.strftime("%Y-%m-%d")
-                    }])
-                    try:
-                        ex_prod = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
-                        conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", data=pd.concat([ex_prod, df_cioc], ignore_index=True))
-                        st.success(f"✅ Prodotto di cioccolata '{nome_referenza}' ({categoria_cioc}) registrato con successo!")
-                    except Exception as e:
-                        st.error("❌ Errore di salvataggio.")
-                        st.exception(e)
+        fecha_scadenza_cioc = st.date_input("Data di Scadenza (inserimento manuale):", value=date.today() + timedelta(days=60))
+        note_cioc = st.text_input("Note opzionali:")
+        
+        if st.button("💾 Salva Produzione Cioccolato"):
+            if op_cioc == "Seleziona il tuo nome" or not nome_referenza:
+                st.error("❌ Per favore, seleziona l'operatore e inserisci il nome della referenza.")
+            else:
+                ahora_dt = obtener_tiempo_actual()
+                ahora_str = ahora_dt.strftime("%Y-%m-%d %H:%M:%S")
+                lotto_automatico = f"LC{ahora_dt.strftime('%y%j')}"
+                
+                df_cioc = pd.DataFrame([{
+                    "Data_Ora": ahora_str, "Lotto": lotto_automatico, "Note_Opzionali": note_cioc,
+                    "Categoria": categoria_cioc, "Sottocategoria": sottocategoria, "Prodotto_Gusto": nome_referenza,
+                    "Ricorrenza": festivita, "Kili_Prodotti": quantita, "Unita": unita_misura,
+                    "Formato": modalita_formato, "N_Confezioni": n_confezioni, "Destinazione_Interna": destinazione_interna,
+                    "Reparto": "Laboratorio Cioccolato", "Operatore": op_cioc, "Scadenza": fecha_scadenza_cioc.strftime("%Y-%m-%d")
+                }])
+                try:
+                    ex_prod = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
+                    conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", data=pd.concat([ex_prod, df_cioc], ignore_index=True))
+                    st.success(f"✅ Prodotto di cioccolata '{nome_referenza}' ({categoria_cioc}) registrato con successo!")
+                except Exception as e:
+                    st.error("❌ Errore di salvataggio.")
+                    st.exception(e)
 
     # --- SUB-MODO: LABORATORIO PASTICCERIA ---
     elif st.session_state.modo_operatore == "prod_pasticceria":
@@ -414,7 +395,7 @@ if rol == "Operatore (Base)":
         with st.form("form_prod_pasticceria"):
             op_past = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome"] + st.session_state.lista_operatori)
             prodotto_past = st.text_input("Prodotto / Preparazione Pasticceria:")
-            kili_past = st.number_input("Quantità (Kg / Pezzi):", min_value=0.1, max_value=50.0, value=5.0, step5=0.5 if 'step5' in locals() else 0.5)
+            kili_past = st.number_input("Quantità (Kg / Pezzi):", min_value=0.1, max_value=50.0, value=5.0, step=0.5)
             note_past = st.text_input("Note opzionali:")
             
             submit_past = st.form_submit_button("💾 Salva Produzione Pasticceria")
@@ -441,7 +422,7 @@ if rol == "Operatore (Base)":
 
 
 # =====================================================================
-# VISTA 2: ROL LEADER
+# VISTA 2: ROL LEADER (Con Gráficos BI de Producción y Tipo de Helado)
 # =====================================================================
 elif rol == "Leader (Consultazione)":
     st.subheader("📊 Dashboard Direttiva & Business Intelligence")
@@ -464,14 +445,38 @@ elif rol == "Leader (Consultazione)":
         try:
             df_p = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
             if not df_p.empty:
-                filtro_tipo = st.selectbox("Filtra reparto:", ["Tutti", "Laboratorio Gelato", "Laboratorio Cioccolato", "Laboratorio Pasticceria"])
-                if filtro_tipo != "Tutti":
-                    df_p = df_p[df_p["Reparto"] == filtro_tipo]
-                st.dataframe(df_p, use_container_width=True)
+                filtro_reparto = st.selectbox("Filtra Reparto:", ["Tutti", "Laboratorio Gelato", "Laboratorio Cioccolato", "Laboratorio Pasticceria"])
+                if filtro_reparto != "Tutti":
+                    df_p = df_p[df_p["Reparto"] == filtro_reparto]
+                
+                # Si estamos en Laboratorio Gelato, permitir discriminar Gelato Proprio vs Base/Sciroppo
+                if filtro_reparto == "Laboratorio Gelato" and "Tipo" in df_p.columns:
+                    filtro_tipo_gelato = st.radio("Filtra Categoria Gelateria:", ["Tutti", "Gelato Proprio", "Base / Sciroppo"], horizontal=True)
+                    if filtro_tipo_gelato != "Tutti":
+                        df_p = df_p[df_p["Tipo"] == filtro_tipo_gelato]
+
+                st.divider()
+                
+                # Métricas principales
+                total_kili = df_p["Kili_Prodotti"].sum() if "Kili_Prodotti" in df_p.columns else 0
+                total_lotti = len(df_p)
+                col_m1, col_m2 = st.columns(2)
+                col_m1.metric("Chili / Quantità Totale", f"{total_kili}")
+                col_m2.metric("Registrazioni / Lotti", total_lotti)
+
+                st.divider()
+                st.markdown("### 📊 Grafico Produzione per Gusto / Prodotto (Kg o Pezzi)")
+                if "Prodotto_Gusto" in df_p.columns and "Kili_Prodotti" in df_p.columns:
+                    df_grafico = df_p.groupby("Prodotto_Gusto")["Kili_Prodotti"].sum()
+                    st.bar_chart(df_grafico)
+
+                st.write("📋 **Storico Dettagliato:**")
+                st.dataframe(df_p.tail(15), use_container_width=True)
             else:
-                st.info("Nessuna produzione registrata.")
-        except:
-            st.warning("Impossibile caricare produzioni.")
+                st.info("ℹ️ Nessuna produzione registrata.")
+        except Exception as e:
+            st.warning("Errore nel caricamento dei dati di produzione.")
+            st.exception(e)
 
     with tab_alertas:
         st.markdown("### 🚨 Gestione Frigoriferi Fuori Norma")
@@ -525,20 +530,49 @@ elif rol == "Admin (Gestione Totale)":
 
     with tab_sab:
         st.markdown("### Aggiungi o Rimuovi Gusti / Basi")
-        cat_destino = st.radio("Seleziona categoria:", ["Gelato Proprio", "Base / Sciroppo"], horizontal=True)
+        cat_destino = st.radio("Seleziona categoria:", ["Gelato Proprio", "Base / Sciroppo"], horizontal=True, key="cat_gusti")
         
-        nuevo_gusto = st.text_input("Nome nuovo gusto/preparazione:")
-        if st.button("➕ Aggiungi Gusto"):
-            if cat_destino == "Gelato Proprio" and nuevo_gusto not in st.session_state.lista_sapori_gelato:
-                st.session_state.lista_sapori_gelato.append(nuevo_gusto)
-                st.success("Gusto gelato aggiunto!")
-            elif cat_destino == "Base / Sciroppo" and nuevo_gusto not in st.session_state.lista_sapori_gelato:
-                st.session_state.lista_basi_sciroppi.append(nuevo_gusto)
-                st.success("Base/Sciroppo aggiunto!")
+        nuevo_gusto = st.text_input("Nome nuovo gusto/preparazione:", key="input_nuovo_gusto")
+        if st.button("➕ Aggiungi Gusto", key="btn_add_gusto"):
+            if cat_destino == "Gelato Proprio":
+                if nuevo_gusto and nuevo_gusto not in st.session_state.lista_sapori_gelato:
+                    st.session_state.lista_sapori_gelato.append(nuevo_gusto)
+                    st.success("Gusto gelato aggiunto con successo!")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Inserisci un nome valido o il gusto esiste già.")
+            else:
+                if nuevo_gusto and nuevo_gusto not in st.session_state.lista_basi_sciroppi:
+                    st.session_state.lista_basi_sciroppi.append(nuevo_gusto)
+                    st.success("Base/Sciroppo aggiunto con successo!")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Inserisci un nome valido o la base esiste già.")
                 
-        st.write(f"**Catalogo attuale ({cat_destino}):**")
+        st.divider()
+        
         lista_ref = st.session_state.lista_sapori_gelato if cat_destino == "Gelato Proprio" else st.session_state.lista_basi_sciroppi
+        
+        st.write(f"**Catalogo attuale ({cat_destino}):**")
         st.write(lista_ref)
+        
+        st.divider()
+        st.markdown("### 🗑️ Rimuovi Gusto / Base")
+        if lista_ref:
+            rem_gusto = st.selectbox("Seleziona elemento da rimuovere:", lista_ref, key="sel_rem_gusto")
+            if st.button("🗑️ Rimuovi Elemento", key="btn_rem_gusto"):
+                if cat_destino == "Gelato Proprio":
+                    if rem_gusto in st.session_state.lista_sapori_gelato:
+                        st.session_state.lista_sapori_gelato.remove(rem_gusto)
+                        st.success(f"Elemento '{rem_gusto}' rimosso con successo!")
+                        st.rerun()
+                else:
+                    if rem_gusto in st.session_state.lista_basi_sciroppi:
+                        st.session_state.lista_basi_sciroppi.remove(rem_gusto)
+                        st.success(f"Elemento '{rem_gusto}' rimosso con successo!")
+                        st.rerun()
+        else:
+            st.info("Nessun elemento disponibile in questa categoria.")
 
 elif rol is None:
     st.info("👈 Seleziona il tuo ruolo nella barra laterale e inserisci la password.")
