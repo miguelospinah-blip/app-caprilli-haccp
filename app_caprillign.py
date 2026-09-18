@@ -310,7 +310,7 @@ if rol == "Operatore (Base)":
                         st.error("❌ Errore.")
                         st.exception(e)
 
-    # --- SUB-MODO: LABORATORIO CIOCCOLATO (Corregido df_cioc) ---
+    # --- SUB-MODO: LABORATORIO CIOCCOLATO (Con Grammi_Confezione incluido) ---
     elif st.session_state.modo_operatore == "prod_cioccolato":
         if st.button("⬅ Torna ai Laboratori"):
             st.session_state.modo_operatore = "produzione_menu"
@@ -369,11 +369,22 @@ if rol == "Operatore (Base)":
                 lotto_automatico = f"LC{ahora_dt.strftime('%y%j')}"
                 
                 df_cioc = pd.DataFrame([{
-                    "Data_Ora": ahora_str, "Lotto": lotto_automatico, "Note_Opzionali": note_cioc,
-                    "Categoria": categoria_cioc, "Sottocategoria": sottocategoria, "Prodotto_Gusto": nome_referenza,
-                    "Ricorrenza": festivita, "Quantita": quantita, "Unita": unita_misura,
-                    "Formato": modalita_formato, "N_Confezioni": n_confezioni, "Destinazione_Interna": destinazione_interna,
-                    "Reparto": "Laboratorio Cioccolato", "Operatore": op_cioc, "Scadenza": fecha_scadenza_cioc.strftime("%Y-%m-%d")
+                    "Data_Ora": ahora_str, 
+                    "Lotto": lotto_automatico, 
+                    "Note_Opzionali": note_cioc,
+                    "Categoria": categoria_cioc, 
+                    "Sottocategoria": sottocategoria, 
+                    "Prodotto_Gusto": nome_referenza,
+                    "Ricorrenza": festivita, 
+                    "Quantita": quantita, 
+                    "Unita": unita_misura,
+                    "Formato": modalita_formato, 
+                    "N_Confezioni": n_confezioni, 
+                    "Grammi_Confezione": grammi_confezione, # <-- Incluido correctamente
+                    "Destinazione_Interna": destinazione_interna,
+                    "Reparto": "Laboratorio Cioccolato", 
+                    "Operatore": op_cioc, 
+                    "Scadenza": fecha_scadenza_cioc.strftime("%Y-%m-%d")
                 }])
                 try:
                     ex_prod = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Cioccolato", ttl=0)
