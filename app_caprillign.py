@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
@@ -10,7 +11,7 @@ st.set_page_config(page_title="HACCP & ERP Caprilli", page_icon="🍦", layout="
 st.sidebar.title("🔐 Accesso Sistema")
 rol_seleccionado = st.sidebar.selectbox("Seleziona Ruolo:", ["Operatore (Base)", "Leader (Consultazione)", "Admin (Gestione Totale)"])
 
-rol = None  # Inicializamos el rol definitivo
+rol = None  
 
 if rol_seleccionado == "Operatore (Base)":
     rol = "Operatore (Base)"
@@ -20,7 +21,6 @@ elif rol_seleccionado == "Leader (Consultazione)":
     st.sidebar.divider()
     st.sidebar.write("🔒 **Area protetta per la Dirigenza**")
     password_leader = st.sidebar.text_input("Inserisci password Leader:", type="password")
-    
     if password_leader == "Caprilli2026!":
         rol = "Leader (Consultazione)"
         st.sidebar.success("✅ Autenticato come Leader")
@@ -31,7 +31,6 @@ elif rol_seleccionado == "Admin (Gestione Totale)":
     st.sidebar.divider()
     st.sidebar.write("🛡️ **Area Riservata Amministratore**")
     password_admin = st.sidebar.text_input("Inserisci password Admin:", type="password")
-    
     if password_admin == "AdminCaprilli99*":
         rol = "Admin (Gestione Totale)"
         st.sidebar.success("✅ Accesso Admin Autorizzato")
@@ -43,7 +42,6 @@ st.sidebar.info(f"Profilo attivo: **{rol if rol else 'In attesa di autenticazion
 
 # --- LOGO Y TÍTULO CENTRADOS ---
 col1, col2, col3 = st.columns([1, 2, 1])
-
 with col2:
     try:
         st.image("Logo.png", use_container_width=True)
@@ -57,7 +55,6 @@ st.divider()
 # --- CONEXIÓN DIRECTA CON GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Aseguramos que la clave privada cargue los saltos de línea correctamente si vienen alterados
 try:
     if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
         if "private_key" in st.secrets["connections"]["gsheets"]:
@@ -65,7 +62,32 @@ try:
 except Exception:
     pass
 
-# --- EVALUACIÓN INTERNA PARA EL REGISTRO HACCP ---
+# --- GESTIÓN DE HORA LOCAL (ITALIA - ROME) ---
+def obtener_tiempo_actual():
+    try:
+        return datetime.now(ZoneInfo("Europe/Rome"))
+    except Exception:
+        return datetime.now()
+
+# --- LISTAS DINÁMICAS EN SESSION STATE ---
+if 'lista_operatori' not in st.session_state:
+    st.session_state.lista_operatori = ["Alessandra", "Chiara", "Miguel", "Antonio", "Ricardo", "Tommaso", "Francesco", "Matilde", "Giorgia", "Linda", "Manuel", "Luduvica", "Asia", "Edoardo"]
+
+if 'lista_sapori_gelato' not in st.session_state:
+    st.session_state.lista_sapori_gelato = [
+        "Limone", "Mango", "Pesca", "Mora", "Mirtillo", "Fico", "YMN", "Fior di latte", 
+        "Stracciatella", "Cocco", "Crema Diretta", "Crema Caprilli", "Vaniglia", "Mascarpone", 
+        "CheeseCake", "Tamaro", "Nocciola", "Pistacchio", "Caramello", "Burro di Arachidi", 
+        "Meglio della Nutela", "Caffe", "Cioccolato al latte", "Fondente", "Liquiritzia", 
+        "Yogurt Soft", "Yogurt", "Caramello Mou", "Caramello Salato", "Infuso Caffe"
+    ]
+
+if 'lista_basi_sciroppi' not in st.session_state:
+    st.session_state.lista_basi_sciroppi = [
+        "Sciroppo / Base", "Base Bianca", "Base Gialla Frutta", "Base Cioccolato", "Base Neutra"
+    ]
+
+# --- EVALUACIÓN INTELIGENTE Y CALIBRADA DE TEMPERATURAS ---
 def evaluar_temperatura(equipo, valor):
     if valor == "Non in uso":
         return "Non in uso"
@@ -73,28 +95,32 @@ def evaluar_temperatura(equipo, valor):
     val = float(valor)
     equipo_lower = equipo.lower()
 
-    if any(k in equipo_lower for k in ["conservatore", "congelatore", "vetrina", "banco", "cella"]):
-        if "cioccolato" not in equipo_lower and "latte" not in equipo_lower and "materie" not in equipo_lower:
+    if "cioccolato" in equipo_lower:
+        return "⚠ FUORI NORMA" if (val < 12.0 or val > 20.0) else "OK Cioccolato"
+
+    if any(k in equipo_lower for k in ["conservatore", "congelatore", "banco 1", "banco 2", "vetrina 1", "vetrina 2", "vetrina 3", "vetrina 4", "cella 1", "cella 2"]):
+        if "latte" not in equipo_lower and "materie" not in equipo_lower and "frigo" not in equipo_lower:
             return "⚠ FUORI NORMA" if val > -10.0 else "OK Congelatore"
 
     if "scioglitrice" in equipo_lower or "temperatrice" in equipo_lower:
         return "⚠ FUORI NORMA" if (val < 20.0 or val > 50.0) else "OK Caldo"
 
-    return "⚠ FUORI NORMA" if val > 6.0 else "OK Frigo"
+    if any(k in equipo_lower for k in ["frigo", "cella", "panna", "farciture", "yogurt", "granite"]):
+        return "⚠ FUORI NORMA" if (val < -1.0 or val > 8.0) else "OK Frigo"
+
+    return "⚠ FUORI NORMA" if val > 8.0 else "OK Frigo"
 
 
 # =====================================================================
-# VISTA 1: ROL OPERATORE (Con selección entre Temperatura y Producción)
+# VISTA 1: ROL OPERATORE
 # =====================================================================
 if rol == "Operatore (Base)":
     
     if 'modo_operatore' not in st.session_state:
         st.session_state.modo_operatore = "menu"
 
-    # --- MENÚ PRINCIPAL DEL OPERADOR ---
     if st.session_state.modo_operatore == "menu":
         st.markdown("### Seleziona l'attività da svolgere:")
-        
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             if st.button("🌡️ REGISTRAZIONE TEMPERATURA", use_container_width=True):
@@ -105,19 +131,14 @@ if rol == "Operatore (Base)":
                 st.session_state.modo_operatore = "produzione_menu"
                 st.rerun()
 
-    # --- SUB-MODO: TEMPERATURAS ---
+    # --- SUB-MODO: TEMPERATURAS (Tus campos originales exactos) ---
     elif st.session_state.modo_operatore == "temperatura":
         if st.button("⬅ Torna al Menu Principale"):
             st.session_state.modo_operatore = "menu"
             st.rerun()
             
         sede = st.selectbox("Seleziona la sede / reparto:", [
-            "Seleziona la sede",
-            "Laboratorio Cioccolato", 
-            "Laboratorio Gelato", 
-            "Laboratorio Pasticceria", 
-            "Viale Italia", 
-            "Cavour"
+            "Seleziona la sede", "Laboratorio Cioccolato", "Laboratorio Gelato", "Laboratorio Pasticceria", "Viale Italia", "Cavour"
         ])
 
         if sede == "Seleziona la sede":
@@ -126,11 +147,10 @@ if rol == "Operatore (Base)":
             st.markdown(f"### Registrazione per: **{sede}**")
 
             with st.form(key=f"form_haccp_{sede}"):
-                operatore = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome", "Alessandra", "Chiara", "Miguel", "Antonio", "Ricardo", "Tommaso", "Francesco", "Matilde", "Giorgia", "Linda", "Manuel", "Luduvica", "Asia", "Edoardo"])
+                operatore = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome"] + st.session_state.lista_operatori)
                 st.divider()
                 
                 lecturas = {}
-                
                 if sede == "Viale Italia":
                     st.write("🌡️ **Inserisci le temperature del locale (Viale Italia):**")
                     lecturas["Vetrina 1"] = st.number_input("Vetrina 1 (°C)", value=-18.0, step=0.5, format="%.1f")
@@ -169,7 +189,6 @@ if rol == "Operatore (Base)":
                     
                     st.divider()
                     st.write("⚙️ **Macchine di Lavorazione / Pastorizzazione:**")
-                    
                     uso_m2 = st.checkbox("Mantecatore 2 (Yogurt/Conservazione) in uso", value=True)
                     lecturas["Mantecatore 2"] = st.number_input("Temp. Mantecatore 2 (°C)", value=4.0, step=0.5, format="%.1f") if uso_m2 else "Non in uso"
 
@@ -202,42 +221,29 @@ if rol == "Operatore (Base)":
                     if operatore == "Seleziona il tuo nome":
                         st.error("❌ Per favore, seleziona il tuo nome operatore prima di inviare.")
                     else:
-                        ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        
+                        ahora_str = obtener_tiempo_actual().strftime("%Y-%m-%d %H:%M:%S")
                         filas_nuevas = []
                         for equipo, temp in lecturas.items():
-                            stato_temp = evaluar_temperatura(equipo, temp)
                             filas_nuevas.append({
-                                "Fecha_Hora": ahora,
-                                "Sede": sede,
-                                "Equipo": equipo,
-                                "Temperatura": str(temp),
-                                "Operatore": operatore,
-                                "Stato": stato_temp
+                                "Fecha_Hora": ahora_str, "Sede": sede, "Equipo": equipo,
+                                "Temperatura": str(temp), "Operatore": operatore, "Stato": evaluar_temperatura(equipo, temp), "Risolto": "No"
                             })
-                        
                         df_nuevo = pd.DataFrame(filas_nuevas)
-                        
                         try:
                             existing_data = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", ttl=0)
-                            updated_df = pd.concat([existing_data, df_nuevo], ignore_index=True)
-                            conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", data=updated_df)
-                            
+                            conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", data=pd.concat([existing_data, df_nuevo], ignore_index=True))
                             st.success(f"✅ Registrate con successo {len(lecturas)} temperature per {sede}!")
-                            st.dataframe(df_nuevo)
-                            
                         except Exception as e:
                             st.error("❌ Errore durante il salvataggio nel database.")
                             st.exception(e)
 
-    # --- SUB-MODO: MENÚ DE PRODUCCIÓN ---
+    # --- SUB-MODO: MENÚ DE PRODUCCIÓN (3 LABS) ---
     elif st.session_state.modo_operatore == "produzione_menu":
         if st.button("⬅ Torna al Menu Principale"):
             st.session_state.modo_operatore = "menu"
             st.rerun()
             
         st.markdown("### 🏭 Seleziona il Laboratorio per la Produzione:")
-        
         col_p1, col_p2, col_p3 = st.columns(3)
         with col_p1:
             if st.button("🍦 Laboratorio Gelato", use_container_width=True):
@@ -245,222 +251,294 @@ if rol == "Operatore (Base)":
                 st.rerun()
         with col_p2:
             if st.button("🍫 Laboratorio Cioccolato", use_container_width=True):
-                st.info("Modulo in sviluppo.")
+                st.session_state.modo_operatore = "prod_cioccolato"
+                st.rerun()
         with col_p3:
             if st.button("🍰 Laboratorio Pasticceria", use_container_width=True):
-                st.info("Modulo in sviluppo.")
+                st.session_state.modo_operatore = "prod_pasticceria"
+                st.rerun()
 
-    # --- SUB-MODO: PRODUCCIÓN LABORATORIO GELATO (Automatizado con Lote) ---
+    # --- SUB-MODO: LABORATORIO GELATO ---
     elif st.session_state.modo_operatore == "prod_gelato":
         if st.button("⬅ Torna ai Laboratori"):
             st.session_state.modo_operatore = "produzione_menu"
             st.rerun()
             
         st.markdown("### 🍦 Registrazione Produzione - Laboratorio Gelato")
-        st.info("💡 Il codice lotto viene generato automaticamente in stile bilancia in base all'orario di registrazione.")
+        tipo_gelato_sel = st.radio("Seleziona categoria:", ["Gelato Proprio", "Base / Sciroppo"], horizontal=True)
         
         with st.form("form_prod_gelato"):
-            op_gelato = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome", "Alessandra", "Chiara", "Miguel", "Antonio", "Ricardo", "Tommaso", "Francesco", "Matilde", "Giorgia", "Linda", "Manuel", "Luduvica", "Asia", "Edoardo"])
+            op_gelato = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome"] + st.session_state.lista_operatori)
             
-            sapore = st.selectbox("Seleziona Gusto / Preparazione:", [
-                "Limone", "Mango", "Pesca", "Mora", "Mirtillo", "Fico", "YMN", "Fior di latte", "Stracciatella", "Cocco", "Crema Diretta", "Crema Caprilli", "Vaniglia", "Mascarpone", "CheeseCake", "Tamaro", "Nocciola", "Pistacchio", "Caramello", "Burro di Arachidi", "Meglio della Nutela", "Caffe", "Cioccolato al latte", "Fondente", "Liquiritzia", "Yogurt Soft", "Yogurt", "Caramello Mou", "Caramello Salato", "Sciroppo Frutta/Yogurt", "Infuso Caffe", "Granita Anguria", "Granita Limone", "Granita Mandorla", "Granita Caffe", "Granita Menta", "Granita Fragola", "Granita Lampone", "Granita Pera", "Granita Pesca", "Granita Melone", "Granita Mela Verde"
-            ])
-            
+            if tipo_gelato_sel == "Gelato Proprio":
+                sapore = st.selectbox("Seleziona Gusto / Preparazione:", st.session_state.lista_sapori_gelato)
+                dias_caducidad = 90
+            else:
+                sapore = st.selectbox("Seleziona Base / Sciroppo:", st.session_state.lista_basi_sciroppi)
+                dias_caducidad = 7
+                
             kili = st.number_input("Chili totali prodotti (Kg):", min_value=0.5, max_value=100.0, value=11.0, step=0.5)
-            note_prod = st.text_area("Note aggiuntive (opzionale):")
             
-            submit_prod = st.form_submit_button("💾 Salva Produzione")
+            ahora_dt = obtener_tiempo_actual()
+            fecha_scadenza = (ahora_dt + timedelta(days=dias_caducidad)).strftime("%Y-%m-%d")
+            st.info(f"📅 Scadenza stimata automatica: **{fecha_scadenza}**")
+
+            note_opcional = st.text_input("Note opzionali (non alterano il lotto):")
+            
+            submit_prod = st.form_submit_button("💾 Salva Produzione Gelato")
             
             if submit_prod:
                 if op_gelato == "Seleziona il tuo nome":
-                    st.error("❌ Per favore, seleziona il tuo nome operatore.")
+                    st.error("❌ Per favore, seleziona il tuo nome.")
                 else:
-                    # Generamos la fecha y hora actual
-                    ahora_dt = datetime.now()
                     ahora_str = ahora_dt.strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    # Generación automática del lote idéntico al de la báscula: L + Año(2) + Día del año(3) + HoraMinuto(4)
-                    anio_dos_digitos = ahora_dt.strftime("%y")
+                    anio_dos = ahora_dt.strftime("%y")
                     dia_juliano = ahora_dt.strftime("%j")
                     hora_minuto = ahora_dt.strftime("%H%M")
-                    lotto_automatico = f"L{anio_dos_digitos}{dia_juliano}{hora_minuto}"
-                    
-                    # Combinamos el lote generado con cualquier nota extra si el operador la escribió
-                    nota_final = lotto_automatico if not note_prod else f"{lotto_automatico} - {note_prod}"
+                    lotto_automatico = f"L{anio_dos}{dia_juliano}{hora_minuto}"
 
                     df_prod = pd.DataFrame([{
-                        "Data_Ora": ahora_str,
-                        "Note": nota_final, # Aquí se guarda el lote generado de forma automática
-                        "Reparto": "Laboratorio Gelato",
-                        "Prodotto_Gusto": sapore,
-                        "Kili_Prodotti": kili,
-                        "Operatore": op_gelato
+                        "Data_Ora": ahora_str, "Lotto": lotto_automatico, "Note_Opzionali": note_opcional if note_opcional else "",
+                        "Tipo": tipo_gelato_sel, "Reparto": "Laboratorio Gelato", "Prodotto_Gusto": sapore,
+                        "Kili_Prodotti": kili, "Operatore": op_gelato, "Scadenza": fecha_scadenza
                     }])
-                    
                     try:
                         ex_prod = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
                         conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", data=pd.concat([ex_prod, df_prod], ignore_index=True))
-                        st.success(f"✅ Registrati {kili} Kg di '{sapore}' con lotto automatico: **{lotto_automatico}**!")
-                        st.dataframe(df_prod)
+                        st.success(f"✅ Registrato '{sapore}' con lotto **{lotto_automatico}**!")
                     except Exception as e:
-                        st.error("❌ Errore durante il salvataggio nel database.")
+                        st.error("❌ Errore.")
                         st.exception(e)
 
+    # --- SUB-MODO: LABORATORIO CIOCCOLATO (Estructura exacta del archivo de tu colega) ---
+    elif st.session_state.modo_operatore == "prod_cioccolato":
+        if st.button("⬅ Torna ai Laboratori"):
+            st.session_state.modo_operatore = "produzione_menu"
+            st.rerun()
+            
+        st.markdown("### 🍫 Registrazione Produzione - Laboratorio Cioccolato")
+        st.info("💡 Basato sullo schema ufficiale del reparto cioccolato.")
+        
+        with st.form("form_prod_cioccolato_strutturato"):
+            op_cioc = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome"] + st.session_state.lista_operatori)
+            
+            # Categorías principales del archivo de tu colega
+            categoria_cioc = st.selectbox("Categoria Prodotto:", [
+                "Tavole di cioccolata", "Dragées", "Praline", "Piccola minuteria", "Spalmabili", "Marmellate", "Bon bon gelato"
+            ])
+            
+            # Subcategorías / tipologías condicionales
+            sottocategoria = "Nessuna"
+            if categoria_cioc == "Tavole di cioccolata":
+                sottocategoria = st.selectbox("Sottocategoria:", ["Tavole ripiene", "Tavole con inclusioni", "Tavole lisce"])
+            elif categoria_cioc == "Praline":
+                sottocategoria = st.selectbox("Sottocategoria:", ["Anidre", "Non anidre"])
+
+            # Nombre de la referenza / ID libre
+            nome_referenza = st.text_input("ID / Nome Referenza / Gusto:")
+            
+            # Recurrencia / Festividad opcional (Zona Festività)
+            festivita = st.selectbox("Ricorrenza / Festività (opzionale):", [
+                "Nessuna", "Natale", "Pasqua", "Festa della mamma", "Festa del papà", "Epifania", "San Valentino", "Altro"
+            ])
+
+            # Cantidad y formato
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                quantita = st.number_input("Quantità prodotta:", min_value=0.1, max_value=1000.0, value=10.0, step=0.5)
+            with col_c2:
+                unita_misura = st.selectbox("Unità di misura:", ["Pezzi", "Kg"])
+
+            modalita_formato = st.selectbox("Modalità / Formato:", [
+                "Pezzo / sfuso", "Confezione a pezzi", "Vasetto a peso", "Uso interno altra produzione"
+            ])
+
+            # Campos condicionales adicionales si es formato confeccionado o vasetto
+            n_confezioni = 0
+            grammi_confezione = 0
+            destinazione_interna = ""
+            if "Confezione" in modalita_formato or "Vasetto" in modalita_formato:
+                n_confezioni = st.number_input("Numero confezioni / vasetti:", min_value=1, max_value=500, value=10)
+                grammi_confezione = st.number_input("Grammi o pezzi per confezione:", min_value=1.0, max_value=5000.0, value=200.0)
+            elif modalita_formato == "Uso interno altra produzione":
+                destinazione_interna = st.text_input("Destinazione interna (es. uova pasquali, soggetti):")
+
+            # Caducidad manual (como pide el documento de tu colega)
+            fecha_scadenza_cioc = st.date_input("Data di Scadenza (inserimento manuale):", value=date.today() + timedelta(days=60))
+            
+            note_cioc = st.text_input("Note opzionali:")
+            
+            submit_cioc = st.form_submit_button("💾 Salva Produzione Cioccolato")
+            if submit_cioc:
+                if op_cioc == "Seleziona il tuo nome" or not nome_referenza:
+                    st.error("❌ Per favore, seleziona l'operatore e inserisci il nome della referenza.")
+                else:
+                    ahora_dt = obtener_tiempo_actual()
+                    ahora_str = ahora_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    # Lote automático basado en la fecha del día (formato LC + AÑODÍA)
+                    lotto_automatico = f"LC{ahora_dt.strftime('%y%j')}"
+                    
+                    df_cioc = pd.DataFrame([{
+                        "Data_Ora": ahora_str,
+                        "Lotto": lotto_automatico,
+                        "Note_Opzionali": note_cioc,
+                        "Categoria": categoria_cioc,
+                        "Sottocategoria": sottocategoria,
+                        "Prodotto_Gusto": nome_referenza,
+                        "Ricorrenza": festivita,
+                        "Kili_Prodotti": quantita,
+                        "Unita": unita_misura,
+                        "Formato": modalita_formato,
+                        "N_Confezioni": n_confezioni,
+                        "Destinazione_Interna": destinazione_interna,
+                        "Reparto": "Laboratorio Cioccolato",
+                        "Operatore": op_cioc,
+                        "Scadenza": fecha_scadenza_cioc.strftime("%Y-%m-%d")
+                    }])
+                    try:
+                        ex_prod = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
+                        conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", data=pd.concat([ex_prod, df_cioc], ignore_index=True))
+                        st.success(f"✅ Prodotto di cioccolata '{nome_referenza}' ({categoria_cioc}) registrato con successo!")
+                    except Exception as e:
+                        st.error("❌ Errore di salvataggio.")
+                        st.exception(e)
+
+    # --- SUB-MODO: LABORATORIO PASTICCERIA ---
+    elif st.session_state.modo_operatore == "prod_pasticceria":
+        if st.button("⬅ Torna ai Laboratori"):
+            st.session_state.modo_operatore = "produzione_menu"
+            st.rerun()
+            
+        st.markdown("### 🍰 Registrazione Produzione - Laboratorio Pasticceria")
+        with st.form("form_prod_pasticceria"):
+            op_past = st.selectbox("Nome Operatore:", ["Seleziona il tuo nome"] + st.session_state.lista_operatori)
+            prodotto_past = st.text_input("Prodotto / Preparazione Pasticceria:")
+            kili_past = st.number_input("Quantità (Kg / Pezzi):", min_value=0.1, max_value=50.0, value=5.0, step5=0.5 if 'step5' in locals() else 0.5)
+            note_past = st.text_input("Note opzionali:")
+            
+            submit_past = st.form_submit_button("💾 Salva Produzione Pasticceria")
+            if submit_past:
+                if op_past == "Seleziona il tuo nome":
+                    st.error("❌ Seleziona il tuo nome.")
+                else:
+                    ahora_dt = obtener_tiempo_actual()
+                    ahora_str = ahora_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    lotto_automatico = f"LP{ahora_dt.strftime('%y%j%H%M')}"
+                    
+                    df_past = pd.DataFrame([{
+                        "Data_Ora": ahora_str, "Lotto": lotto_automatico, "Note_Opzionali": note_past,
+                        "Tipo": "Pasticceria", "Reparto": "Laboratorio Pasticceria", "Prodotto_Gusto": prodotto_past,
+                        "Kili_Prodotti": kili_past, "Operatore": op_past, "Scadenza": (ahora_dt + timedelta(days=15)).strftime("%Y-%m-%d")
+                    }])
+                    try:
+                        ex_prod = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
+                        conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", data=pd.concat([ex_prod, df_past], ignore_index=True))
+                        st.success(f"✅ Pasticceria registrata con lotto **{lotto_automatico}**!")
+                    except Exception as e:
+                        st.error("❌ Errore.")
+                        st.exception(e)
+
+
 # =====================================================================
-# VISTA 2: ROL LEADER / JEFE (Dashboard BI + Consulta Avanzada)
+# VISTA 2: ROL LEADER
 # =====================================================================
 elif rol == "Leader (Consultazione)":
     st.subheader("📊 Dashboard Direttiva & Business Intelligence")
-    st.info("Benvenuto Capo! Panoramica avanzata delle temperature e della produzione.")
     
-    tab_temp, tab_prod = st.tabs(["🌡️ Monitoraggio Temperature", "🍦 Analisi Produzione (Kili)"])
+    tab_temp, tab_prod, tab_alertas = st.tabs(["🌡️ Monitoraggio Temperature", "🍦 Analisi Produzione", "🚨 Anomalie Frigoriferi"])
     
-    # --- PESTAÑA 1: TEMPERATURE CON FILTRO DE MES ---
     with tab_temp:
-        st.markdown("### 🌡️ Filtro Tempi e Temperature")
+        st.markdown("### 🌡️ Storico Temperature")
         try:
             df_temp = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", ttl=0)
-            
             if not df_temp.empty:
-                # Asegurar formato fecha
-                df_temp["Fecha_Hora_dt"] = pd.to_datetime(df_temp["Fecha_Hora"], errors="coerce")
-                
-                # Obtener mes y año actual
-                hoy = datetime.now()
-                mes_actual_num = hoy.month
-                anio_actual_num = hoy.year
-                
-                # Selector de mes
-                col_f1, col_f2 = st.columns(2)
-                with col_f1:
-                    mes_sel = st.selectbox(
-                        "Seleziona Mese:", 
-                        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 
-                        index=mes_actual_num - 1,
-                        format_func=lambda x: ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"][x-1]
-                    )
-                with col_f2:
-                    anio_sel = st.number_input("Anno:", min_value=2024, max_value=2030, value=anio_actual_num)
-                
-                # Filtrar dataframe por el mes y año seleccionados
-                df_temp_filtrado = df_temp[
-                    (df_temp["Fecha_Hora_dt"].dt.month == mes_sel) & 
-                    (df_temp["Fecha_Hora_dt"].dt.year == anio_sel)
-                ]
-                
-                st.divider()
-                
-                if not df_temp_filtrado.empty:
-                    total_registros = len(df_temp_filtrado)
-                    fuori_norma = len(df_temp_filtrado[df_temp_filtrado["Stato"] == "⚠ FUORI NORMA"]) if "Stato" in df_temp_filtrado.columns else 0
-                    conformita = ((total_registros - fuori_norma) / total_registros) * 100 if total_registros > 0 else 100
-                    
-                    col_k1, col_k2, col_k3 = st.columns(3)
-                    col_k1.metric("Registri nel Mese", total_registros)
-                    col_k2.metric("Fuori Norma", fuori_norma, delta_color="inverse" if fuori_norma > 0 else "normal")
-                    col_k3.metric("Conformità HACCP", f"{conformita:.1f}%")
-                    
-                    st.divider()
-                    st.markdown(f"### 📈 Stato dei Registri per Sede ({mes_sel}/{anio_sel})")
-                    if "Sede" in df_temp_filtrado.columns:
-                        conteo_sedes = df_temp_filtrado["Sede"].value_counts()
-                        st.bar_chart(conteo_sedes)
-                    
-                    st.write(f"📋 **Storico temperature selezionate ({mes_sel}/{anio_sel}):**")
-                    st.dataframe(df_temp_filtrado.drop(columns=["Fecha_Hora_dt"]).tail(15), use_container_width=True)
-                else:
-                    st.warning(f"⚠️ Nessun dato sulle temperature trovato per il mese {mes_sel}/{anio_sel}.")
+                st.dataframe(df_temp.tail(15), use_container_width=True)
             else:
-                st.warning("Nessun dato sulle temperature trovato nel database.")
-        except Exception as e:
-            st.warning("Errore nel caricamento dati temperature.")
-            st.exception(e)
+                st.info("Nessun dato.")
+        except:
+            st.warning("Caricamento in corso...")
 
-    # --- PESTAÑA 2: PRODUCCIÓN CON FILTRO DE DÍA Y MES ---
     with tab_prod:
-        st.markdown("### 🍦 Filtro Produzione (Giornaliera o Mensile)")
+        st.markdown("### 🍦 Analisi Produzione e Scadenze")
         try:
-            df_prod_bi = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
-            
-            if not df_prod_bi.empty:
-                # Asegurar formato fecha
-                df_prod_bi["Data_Ora_dt"] = pd.to_datetime(df_prod_bi["Data_Ora"], errors="coerce")
-                
-                # Opciones de visualización
-                tipo_vista = st.radio("Visualizza per:", ["Giorno specifico", "Intero Mese"], horizontal=True)
-                
-                if tipo_vista == "Giorno specifico":
-                    data_selezionata = st.date_input("Seleziona la data:", value=date.today())
-                    
-                    # Filtrar por día exacto
-                    df_prod_filtrado = df_prod_bi[
-                        df_prod_bi["Data_Ora_dt"].dt.date == data_selezionata
-                    ]
-                    titulo_filtro = f"del giorno {data_selezionata.strftime('%d/%m/%Y')}"
-                else:
-                    hoy = datetime.now()
-                    col_pm1, col_pm2 = st.columns(2)
-                    with col_pm1:
-                        mes_prod_sel = st.selectbox(
-                            "Mese Produzione:", 
-                            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 
-                            index=hoy.month - 1,
-                            format_func=lambda x: ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"][x-1],
-                            key="mes_prod"
-                        )
-                    with col_pm2:
-                        anio_prod_sel = st.number_input("Anno Produzione:", min_value=2024, max_value=2030, value=hoy.year, key="anio_prod")
-                    
-                    df_prod_filtrado = df_prod_bi[
-                        (df_prod_bi["Data_Ora_dt"].dt.month == mes_prod_sel) & 
-                        (df_prod_bi["Data_Ora_dt"].dt.year == anio_prod_sel)
-                    ]
-                    titulo_filtro = f"del mese {mes_prod_sel}/{anio_prod_sel}"
-
-                st.divider()
-                
-                if not df_prod_filtrado.empty:
-                    total_kili = df_prod_filtrado["Kili_Prodotti"].sum() if "Kili_Prodotti" in df_prod_filtrado.columns else 0
-                    total_lotti = len(df_prod_filtrado)
-                    
-                    col_p1, col_p2 = st.columns(2)
-                    col_p1.metric(f"Chili Prodotti ({titulo_filtro})", f"{total_kili} Kg")
-                    col_p2.metric("Lotti Registrati", total_lotti)
-                    
-                    st.divider()
-                    st.markdown(f"### 📊 Produzione per Gusto (Kg) - {titulo_filtro}")
-                    if "Prodotto_Gusto" in df_prod_filtrado.columns and "Kili_Prodotti" in df_prod_filtrado.columns:
-                        df_gusti = df_prod_filtrado.groupby("Prodotto_Gusto")["Kili_Prodotti"].sum()
-                        st.bar_chart(df_gusti)
-                    
-                    st.write(f"📋 **Storico Produzioni ({titulo_filtro}):**")
-                    st.dataframe(df_prod_filtrado.drop(columns=["Data_Ora_dt"]), use_container_width=True)
-                else:
-                    st.info(f"ℹ️ Non ci sono registrazioni di produzione {titulo_filtro}.")
+            df_p = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Gelato", ttl=0)
+            if not df_p.empty:
+                filtro_tipo = st.selectbox("Filtra reparto:", ["Tutti", "Laboratorio Gelato", "Laboratorio Cioccolato", "Laboratorio Pasticceria"])
+                if filtro_tipo != "Tutti":
+                    df_p = df_p[df_p["Reparto"] == filtro_tipo]
+                st.dataframe(df_p, use_container_width=True)
             else:
-                st.info("ℹ️ Non ci sono ancora registrazioni nel foglio 'Produzione_Gelato'.")
+                st.info("Nessuna produzione registrata.")
+        except:
+            st.warning("Impossibile caricare produzioni.")
+
+    with tab_alertas:
+        st.markdown("### 🚨 Gestione Frigoriferi Fuori Norma")
+        try:
+            df_t = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", ttl=0)
+            if not df_t.empty and "Stato" in df_t.columns:
+                fuori = df_t[(df_t["Stato"] == "⚠ FUORI NORMA") & (df_t.get("Risolto", "No") == "No")]
+                
+                if not fuori.empty:
+                    st.error(f"⚠️ Attenzione! Ci sono {len(fuori)} apparecchiature con anomalie attive.")
+                    st.dataframe(fuori, use_container_width=True)
+                    
+                    idx_resolver = st.selectbox("Seleziona riga da segnare come risolta:", fuori.index)
+                    if st.button("🛠️ Segna come Risolto"):
+                        df_t.loc[idx_resolver, "Risolto"] = "Sì"
+                        conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", data=df_t)
+                        st.success("✅ Incidente segnato come risolto!")
+                        st.rerun()
+                else:
+                    st.success("🎉 Ottimo! Nessun frigorifero fuori norma al momento.")
+            else:
+                st.info("Nessun dato di anomalia trovato.")
         except Exception as e:
-            st.warning("Assicurati che esista il foglio 'Produzione_Gelato' nel tuo Google Sheets.")
+            st.warning("Errore nel modulo di controllo anomalie.")
 
 
 # =====================================================================
-# VISTA 3: ROL ADMIN (Gestión Total)
+# VISTA 3: ROL ADMIN
 # =====================================================================
 elif rol == "Admin (Gestione Totale)":
-    st.subheader("🛠️ Pannello di Amministrazione")
-    st.warning("Accesso amministrativo completo abilitato.")
+    st.subheader("🛠️ Pannello di Amministrazione & Parametri")
     
-    try:
-        data_admin = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", ttl=0)
-        st.write(f"Record totali nel database temperature: **{len(data_admin)}**")
-        st.dataframe(data_admin, use_container_width=True)
+    tab_trab, tab_sab = st.tabs(["👥 Gestione Lavoratori", "🍧 Gestione Gusti e Basi"])
+    
+    with tab_trab:
+        st.markdown("### Aggiungi o Rimuovi Lavoratori")
+        nuevo_op = st.text_input("Nome nuovo lavoratore:")
+        if st.button("➕ Aggiungi Lavoratore"):
+            if nuevo_op and nuevo_op not in st.session_state.lista_operatori:
+                st.session_state.lista_operatori.append(nuevo_op)
+                st.success(f"Lavoratore {nuevo_op} aggiunto con successo!")
         
-        if st.button("🔄 Aggiorna Dati Database"):
+        st.write("**Lavoratori attivi attuali:**")
+        st.write(st.session_state.lista_operatori)
+        
+        rem_op = st.selectbox("Seleziona lavoratore da rimuovere:", st.session_state.lista_operatori)
+        if st.button("🗑️ Rimuovi Lavoratore"):
+            st.session_state.lista_operatori.remove(rem_op)
+            st.success("Lavoratore rimosso!")
             st.rerun()
-            
-    except Exception as e:
-        st.error("Impossibile caricare il database.")
-        st.exception(e)
+
+    with tab_sab:
+        st.markdown("### Aggiungi o Rimuovi Gusti / Basi")
+        cat_destino = st.radio("Seleziona categoria:", ["Gelato Proprio", "Base / Sciroppo"], horizontal=True)
+        
+        nuevo_gusto = st.text_input("Nome nuovo gusto/preparazione:")
+        if st.button("➕ Aggiungi Gusto"):
+            if cat_destino == "Gelato Proprio" and nuevo_gusto not in st.session_state.lista_sapori_gelato:
+                st.session_state.lista_sapori_gelato.append(nuevo_gusto)
+                st.success("Gusto gelato aggiunto!")
+            elif cat_destino == "Base / Sciroppo" and nuevo_gusto not in st.session_state.lista_sapori_gelato:
+                st.session_state.lista_basi_sciroppi.append(nuevo_gusto)
+                st.success("Base/Sciroppo aggiunto!")
+                
+        st.write(f"**Catalogo attuale ({cat_destino}):**")
+        lista_ref = st.session_state.lista_sapori_gelato if cat_destino == "Gelato Proprio" else st.session_state.lista_basi_sciroppi
+        st.write(lista_ref)
 
 elif rol is None:
-    st.info("👈 Seleziona il tuo ruolo nella barra laterale e inserisci la password corrispondente per accedere alle sezioni protette.")
+    st.info("👈 Seleziona il tuo ruolo nella barra laterale e inserisci la password.")
