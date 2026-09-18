@@ -258,7 +258,7 @@ if rol == "Operatore (Base)":
                 st.session_state.modo_operatore = "prod_pasticceria"
                 st.rerun()
 
-    # --- SUB-MODO: LABORATORIO GELATO (Hoja: Produzione_Gelato) ---
+    # --- SUB-MODO: LABORATORIO GELATO ---
     elif st.session_state.modo_operatore == "prod_gelato":
         if st.button("⬅ Torna ai Laboratori"):
             st.session_state.modo_operatore = "produzione_menu"
@@ -310,7 +310,7 @@ if rol == "Operatore (Base)":
                         st.error("❌ Errore.")
                         st.exception(e)
 
-    # --- SUB-MODO: LABORATORIO CIOCCOLATO (Hoja Independiente: Produzione_Cioccolato) ---
+    # --- SUB-MODO: LABORATORIO CIOCCOLATO (Corregido df_cioc) ---
     elif st.session_state.modo_operatore == "prod_cioccolato":
         if st.button("⬅ Torna ai Laboratori"):
             st.session_state.modo_operatore = "produzione_menu"
@@ -376,15 +376,14 @@ if rol == "Operatore (Base)":
                     "Reparto": "Laboratorio Cioccolato", "Operatore": op_cioc, "Scadenza": fecha_scadenza_cioc.strftime("%Y-%m-%d")
                 }])
                 try:
-                    # Guardado en hoja independiente para Chocolate
                     ex_prod = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Cioccolato", ttl=0)
-                    conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Cioccolato", data=pd.concat([ex_prod, df_prod], ignore_index=True))
+                    conn.update(spreadsheet="Base_Datos_HACCP", worksheet="Produzione_Cioccolato", data=pd.concat([ex_prod, df_cioc], ignore_index=True))
                     st.success(f"✅ Prodotto di cioccolata '{nome_referenza}' registrato con successo!")
                 except Exception as e:
                     st.error("❌ Errore di salvataggio (Assicurati che esista il foglio 'Produzione_Cioccolato' nel Google Sheet).")
                     st.exception(e)
 
-    # --- SUB-MODO: LABORATORIO PASTICCERIA (Hoja Independiente: Produzione_Pasticceria) ---
+    # --- SUB-MODO: LABORATORIO PASTICCERIA ---
     elif st.session_state.modo_operatore == "prod_pasticceria":
         if st.button("⬅ Torna ai Laboratori"):
             st.session_state.modo_operatore = "produzione_menu"
@@ -421,20 +420,18 @@ if rol == "Operatore (Base)":
 
 
 # =====================================================================
-# VISTA 2: ROL LEADER (Gráficos por Reparto, Ranking de Operadores y Filtros de Producción)
+# VISTA 2: ROL LEADER
 # =====================================================================
 elif rol == "Leader (Consultazione)":
     st.subheader("📊 Dashboard Direttiva & Business Intelligence")
     
     tab_temp, tab_prod, tab_alertas = st.tabs(["🌡️ Monitoraggio Temperature", "🍦 Analisi Produzione", "🚨 Anomalie Frigoriferi"])
     
-    # --- PESTAÑA 1: TEMPERATURAS CON 5 GRÁFICOS CIRCULARES Y RANKING DE OPERADORES ---
     with tab_temp:
         st.markdown("### 🌡️ Monitoraggio per Reparto & Audit Lavoratori")
         try:
             df_temp = conn.read(spreadsheet="Base_Datos_HACCP", worksheet="Foglio1", ttl=0)
             if not df_temp.empty:
-                # 1. Gráficos de estado por cada uno de los 5 repartos
                 repartos = ["Laboratorio Cioccolato", "Laboratorio Gelato", "Laboratorio Pasticceria", "Viale Italia", "Cavour"]
                 
                 st.markdown("#### 🟢 Stato Attuale per Reparto")
@@ -450,14 +447,10 @@ elif rol == "Leader (Consultazione)":
                             st.info("Nessun dato")
 
                 st.divider()
-                
-                # 2. Listado y registro actual
                 st.markdown("#### 📋 Storico Registri Temperature")
                 st.dataframe(df_temp.tail(15), use_container_width=True)
                 
                 st.divider()
-                
-                # 3. Cantidad de registros por trabajador (Auditabilidad)
                 st.markdown("#### 👥 Audit Operatori: Registri effettuati per lavoratore")
                 if "Operatore" in df_temp.columns:
                     conteo_ops = df_temp["Operatore"].value_counts()
@@ -468,11 +461,8 @@ elif rol == "Leader (Consultazione)":
             st.warning("Errore nel caricamento del monitoraggio temperature.")
             st.exception(e)
 
-    # --- PESTAÑA 2: PRODUCCIÓN CON FILTRO DE DÍA ESPECÍFICO O MES ---
     with tab_prod:
         st.markdown("### 🍦 Analisi Produzione (Giornaliera o Mensile)")
-        
-        # Selección de Reparto para analizar
         reparto_sel = st.selectbox("Seleziona Reparto da analizzare:", ["Laboratorio Gelato", "Laboratorio Cioccolato", "Laboratorio Pasticceria"])
         
         sheet_name = "Produzione_Gelato"
@@ -486,7 +476,6 @@ elif rol == "Leader (Consultazione)":
             if not df_p.empty:
                 df_p["Data_Ora_dt"] = pd.to_datetime(df_p["Data_Ora"], errors="coerce")
                 
-                # Filtro por Día Específico o Mes entero
                 tipo_vista = st.radio("Visualizza per:", ["Giorno specifico", "Intero Mese"], horizontal=True, key="vista_prod")
                 
                 if tipo_vista == "Giorno specifico":
@@ -510,7 +499,6 @@ elif rol == "Leader (Consultazione)":
                     col_m1, col_m2 = st.columns(2)
                     col_m1.metric(f"Registrazioni {titulo_filtro}", len(df_p_filtrado))
                     
-                    # Gráfico de producción
                     st.markdown(f"### 📊 Produzione {titulo_filtro}")
                     col_graf = "Kili_Prodotti" if "Kili_Prodotti" in df_p_filtrado.columns else "Quantita"
                     if "Prodotto_Gusto" in df_p_filtrado.columns and col_graf in df_p_filtrado.columns:
